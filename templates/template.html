@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+
+<head>
+</head>
+
+<body style="background-image: url('http://localhost:8000/Strike.svg'); background-size: contain; background-repeat: no-repeat;
+	background-color: #f59e0b; display: flex; height: 100vh; justify-content: center; justify-items: center; color:
+	#000000">
+
+	<style>
+		@font-face {
+			font-family: "MagicSchoolTwo";
+			src: url(data:font/woff2;base64,{{base_64}}) format('woff2');
+		}
+	</style>
+	<div
+		style="display: flex; justify-content: center; text-align: center; justify-items: center; flex-direction: column; flex-wrap:wrap; margin: auto">
+		<table style="border-collapse: collapse; width: auto;  border-radius: 5px; overflow: hidden; width: 150%; align-self: center; text-align: center">
+			<tr style="background-color: #f2f2f2; border-radius: 10px; overflow: hidden;">
+				<td
+					style=" text-align: center; padding: 8px; border-radius: 5px; overflow:  hidden; font-family: MagicSchoolTwo; font-size: 2em">
+					ZING!</td>
+			</tr>
+			<tr style="background-color: #f2f2f2; border-radius: 10px; overflow: hidden;">
+				<td style=" text-align: left; padding: 8px; border-radius: 5px; overflow:  hidden">Welcome to ZING!
+					{{ first_name }},</td>
+			</tr>
+			<tr style="background-color: #f2f2f2; border-radius: 10px;">
+				<td style=" text-align: left; padding: 8px; border-radius: 5px; overflow:  hidden">
+					Please proceed to verify your account.
+			</tr>
+			<tr style="background-color: #f2f2f2; border-radius: 10px; overflow: hidden;">
+				<td style=" text-align: left; padding: 8px; border-radius: 5px; overflow:  hidden">Your verification
+					code is:</td>
+			</tr>
+			<tr style="background-color: #f2f2f2; border-radius: 10px; overflow: hidden;">
+				<td
+					style=" text-align: center; padding: 8px; padding-top: 1.5em; border-radius: 5px; overflow:  hidden; font-size: 2em">
+					{{ verification_code }}</td>
+			</tr>
+		</table>
+	</div>
+</body>
+
+</html>
