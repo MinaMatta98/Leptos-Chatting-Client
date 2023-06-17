@@ -24,18 +24,24 @@ pub mod server {
         )]
         Message,
         #[sea_orm(
-            belongs_to = "crate::entities::message::server::Entity",
+            belongs_to = "crate::entities::users::server::Entity",
             from = "Column::SeenId",
-            to = "crate::entities::message::server::Column::MessageId",
+            to = "crate::entities::users::server::Column::Id",
             on_update = "Restrict",
             on_delete = "Cascade"
         )]
-        Message1,
+        Users,
     }
 
     impl Related<crate::entities::message::server::Entity> for Entity {
         fn to() -> RelationDef {
             Relation::Message.def()
+        }
+    }
+
+    impl Related<crate::entities::users::server::Entity> for Entity {
+        fn to() -> RelationDef {
+            Relation::Users.def()
         }
     }
 

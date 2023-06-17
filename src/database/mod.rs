@@ -1,6 +1,7 @@
 use crate::migrator;
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, Statement};
 use sea_orm_migration::prelude::*;
+use std::io::BufRead;
 
 #[derive(Debug)]
 pub struct DbConnection {
@@ -9,6 +10,31 @@ pub struct DbConnection {
 
 #[cfg(feature = "ssr")]
 impl DbConnection {
+    pub async fn start_service() {
+        if let Ok(file) = std::fs::File::open("/etc/os-release") {
+            let reader = std::io::BufReader::new(file);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) if line.starts_with("ID=") => {
+                        let distribution = line[3..].to_string();
+                        // Use the distribution information to install MySQL server
+                        if matches!(distribution.as_str(), "debian" | "ubuntu")
+                            && std::process::Command::new("sudo")
+                                .arg("service")
+                                .arg("mariadb")
+                                .arg("start")
+                                .output()
+                                .is_err()
+                        {
+                            panic!("Failed to start Mariadb Service on {}:", distribution);
+                        }
+                    }
+                    _ => println!("Failed to detect Linux distribution."),
+                }
+            }
+        }
+    }
+
     pub async fn connect() -> DatabaseConnection {
         println!("Retrieving global database variables");
         let database_url = std::env::var("DATABASE_URL").unwrap();
@@ -24,7 +50,9 @@ impl DbConnection {
     }
 }
 
+#[cfg(feature = "ssr")]
 pub async fn database_run() -> Result<(), DbErr> {
+    DbConnection::start_service().await;
     let database_url = match std::env::var("DATABASE_URL") {
         Ok(val) => val,
         Err(e) => panic!(
@@ -50,8 +78,8 @@ pub async fn database_run() -> Result<(), DbErr> {
                 format!("CREATE DATABASE IF NOT EXISTS `{}`;", db_name),
             ))
             .await?;
-
             let url = format!("{}/{}", database_url, db_name);
+            println!("Initializing Database connection @ {database_url}/{db_name}");
             Database::connect(&url).await?
         }
         DbBackend::Postgres => {

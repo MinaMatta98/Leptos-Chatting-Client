@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 pub mod email_client {
     use askama::Template;
-    use base64::engine::{Engine as _, general_purpose};
+    use base64::engine::{general_purpose, Engine as _};
     use lettre::message::header::ContentType;
     use lettre::transport::smtp::authentication::Credentials;
     use lettre::{Message, SmtpTransport, Transport};
@@ -14,7 +14,7 @@ pub mod email_client {
     struct Context<'a> {
         first_name: &'a str,
         verification_code: &'a str,
-        base_64: String
+        base_64: String,
     }
 
     pub fn send_email(
@@ -22,31 +22,25 @@ pub mod email_client {
         first_name: String,
         verification_code: String,
     ) -> Result<(), Box<dyn Error>> {
-        // "Hei <hei@domain.tld>"
-        let password = String::from_utf8(
-            std::process::Command::new("pass")
-                .arg("show")
-                .arg("Rust-2")
-                .output()
-                .unwrap()
-                .stdout
-                .to_vec(),
-        );
+        // THIS IS A TEMPORARY DISPOSABLE PASSWORD
+        let password = "aecmjqtyjexiqlpd";
 
-        let encoded: String = general_purpose::STANDARD_NO_PAD.encode(std::fs::read("./assets/MagicSchoolTwo.ttf").unwrap());
+        let encoded: String = general_purpose::STANDARD_NO_PAD
+            .encode(std::fs::read("./assets/MagicSchoolTwo.ttf").unwrap());
         let template = Context {
             first_name: &first_name,
             verification_code: &verification_code,
-            base_64: encoded
+            base_64: encoded,
         };
         let email = Message::builder()
-            .from("ZING <minamatta98@gmail.com>".parse()?)
+            .from("ZING <jenkinssteadfast@gmail.com>".parse()?)
             .to(recipient.parse()?)
             .subject("Email Verification")
             .header(ContentType::TEXT_HTML)
             .body(template.render().unwrap())?;
 
-        let creds = Credentials::new("minamatta98@gmail.com".to_owned(), password.unwrap());
+        // THIS IS A TEMPORARY DISPOSABLE ACCOUNT FOR DEMO PURPOSES
+        let creds = Credentials::new("jenkinssteadfast@gmail.com".to_owned(), password.to_owned());
 
         // Open a remote connection to gmail
         let mailer = SmtpTransport::relay("smtp.gmail.com")

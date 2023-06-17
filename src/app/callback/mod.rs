@@ -7,7 +7,7 @@ use leptos_icons::*;
 use crate::{app::{NameSchema, SignupSchema,
     EmailSchema, PhoneSchema, EmailContext,
     FormValidation, validation::ValidationSchema,
-    PasswordSchema, VerifyPassword},
+    PasswordSchema, VerifyPassword, pages::UserContext},
     server_function::{ConfirmSubscription,
     self, Login, LoginStatus, sign_up}};
 
@@ -336,7 +336,8 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                                     label_background_color_setter.set("bg-red-500");
                                     validator.set(view! {cx,
                                               <div class="flex justify-center">
-                                                  <p class="text-center text-sm mx-1">"That phone number is already registered"</p><img src="cross.png" class="w-4"/>
+                                                  <p class="text-center text-sm mx-1">"That phone number is already registered"</p>
+                                                  <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
                                               </div>
                                               });
                                 }
@@ -371,8 +372,6 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                                 {match val {
                                     Ok(val) => match val {
                                             VerifyPassword::Success => {
-                                            let status = create_server_action::<LoginStatus>(cx);
-                                            status.dispatch(LoginStatus {  });
                                             queue_microtask(move || use_navigate(cx)("/user", Default::default()).unwrap());
                                                 view!{cx, <p class="text-center">"Successful Login"</p>}
                                             },

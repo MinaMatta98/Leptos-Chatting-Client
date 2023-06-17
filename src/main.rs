@@ -1,6 +1,8 @@
 #![feature(let_chains)]
 #![feature(async_closure)]
-use actix_web::{cookie::Key, dev, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{
+    cookie::Key, dev, get, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+};
 use futures_util::future;
 pub use sea_orm::{Database, DbErr, *};
 pub mod app;
@@ -56,6 +58,18 @@ async fn clear_temp_db() {
     }
 }
 
+#[get("/upload/{image_path}")]
+async fn image_path(path: actix_web::web::Path<String>) -> impl Responder {
+    use std::io::Read;
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("upload/".to_string() + &path.to_string());
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).unwrap();
+    buffer
+}
+
 #[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -66,8 +80,9 @@ async fn main() -> std::io::Result<()> {
     use actix_files::Files;
     use actix_web::middleware::{Compress, Logger, NormalizePath};
     use server_function::{
-        ConfirmSubscription, ConversationAction, GetConversations, GetUsers, Login, LoginStatus,
-        Logout, Redirect, SignUp, Validate, VerifyEmail, ViewMessages, ValidateConversation
+        AssociatedConversation, ConfirmSubscription, ConversationAction, FindImage,
+        GetConversations, GetUsers, HandleMessageInput, HandleSeen, Login, LoginStatus, Logout,
+        Redirect, SignUp, Validate, ValidateConversation, VerifyEmail, ViewMessages,
     };
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;
@@ -91,6 +106,10 @@ async fn main() -> std::io::Result<()> {
     ConversationAction::register().unwrap();
     ViewMessages::register().unwrap();
     ValidateConversation::register().unwrap();
+    AssociatedConversation::register().unwrap();
+    HandleMessageInput::register().unwrap();
+    HandleSeen::register().unwrap();
+    FindImage::register().unwrap();
 
     tokio::task::spawn_local(clear_temp_db());
 
@@ -117,6 +136,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(db_conn.clone())
+            .app_data(actix_web::web::PayloadConfig::new(10_485_760))
             .wrap(IdentityMiddleware::default())
             .wrap(SessionMiddleware::new(
                 redis_store.clone(),
@@ -129,6 +149,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(NormalizePath::new(
                 actix_web::middleware::TrailingSlash::Trim,
             ))
+            .service(image_path)
             .service(Files::new("/", site_root))
     })
     .bind(&addr)?

@@ -9,7 +9,7 @@ pub mod server {
     pub struct Model {
         #[sea_orm(primary_key)]
         pub message_id: i32,
-        pub message_body: String,
+        pub message_body: Option<String>,
         pub message_image: Option<String>,
         pub message_created_at: DateTimeUtc,
         pub message_conversation_id: i32,

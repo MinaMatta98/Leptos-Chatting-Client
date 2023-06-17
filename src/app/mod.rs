@@ -16,7 +16,7 @@ mod validation;
 use crate::app::{
     callback::{Callback, SignupSetters},
     form_items::{Banner, InputProps, InputValidation, ValidationGetter},
-    pages::{Conversations, UserContext, Users, ConversationId},
+    pages::{ConversationId, Conversations, EmptyState, UserContext, Users},
 };
 
 #[derive(Debug, Clone)]
@@ -155,6 +155,8 @@ pub fn App(cx: Scope) -> impl IntoView {
     let (email_context, email_context_setter) = create_signal(cx, String::from(""));
     let (signup_context, signup_context_setter) = create_signal(cx, false);
     let is_open = create_rw_signal(cx, false);
+    let empty_state = create_rw_signal(cx, true);
+    let selected = create_rw_signal(cx, false);
 
     provide_context(cx, IsOpen { status: is_open });
     provide_context(
@@ -173,8 +175,17 @@ pub fn App(cx: Scope) -> impl IntoView {
         },
     );
 
-    let user_signal = create_rw_signal(cx, String::from(""));
-    provide_context(cx, UserContext { id: user_signal });
+    let user_id = create_rw_signal(cx, 0);
+    let user_email = create_rw_signal(cx, String::from(""));
+
+    provide_context(
+        cx,
+        UserContext {
+            id: user_id,
+            email: user_email,
+        },
+    );
+
     view! {
         cx,
 
@@ -195,7 +206,15 @@ pub fn App(cx: Scope) -> impl IntoView {
                     <Route path="/user" view=|cx| view! { cx, <Users /> } ssr = SsrMode::Async/>
                     <Route path="/conversations" view=|cx| view! { cx, <Conversations/> } ssr = SsrMode::Async>
                         <Route path=":id" view=|cx| view! { cx, <ConversationId/> } ssr = SsrMode::Async/>
-                        <Route path="/" view=|cx| view! { cx, <div/> } ssr = SsrMode::Async/>
+                        <Route path="/" view=|cx| view! { cx,
+                                                     <div>
+                                                        <div class=move || format!("lg:pl-80 h-screen
+                                                             lg:block {}", if use_context::<IsOpen>(cx)
+                                                         .unwrap().status.get() {"block"} else {"hidden"})>
+                                                            <EmptyState />
+                                                        </div>
+                                                     </div>
+                        } ssr = SsrMode::Async/>
                     </Route>
                 </Routes>
             </main>
@@ -273,9 +292,6 @@ fn FormItem(
 
 #[component]
 fn Form(cx: Scope, toggle: AppState) -> impl IntoView {
-    on_cleanup(cx, || {
-        log!("cleaning up <Form/>");
-    });
     let first_name = create_node_ref::<Input>(cx);
     let last_name = create_node_ref::<Input>(cx);
     let email = create_node_ref::<Input>(cx);
