@@ -35,7 +35,7 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
-                    .col(ColumnDef::new(Conversation::Name).string().not_null())
+                    .col(ColumnDef::new(Conversation::Name).string())
                     .col(ColumnDef::new(Conversation::IsGroup).boolean().not_null())
                     .to_owned(),
             )

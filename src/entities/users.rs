@@ -14,6 +14,7 @@ pub struct Model {
     pub email: String,
     pub phone_number: i64,
     pub password: String,
+    pub image: Option<String>
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

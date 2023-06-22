@@ -11,7 +11,7 @@ pub mod server {
         pub id: i32,
         pub last_message_at: DateTimeUtc,
         pub created_at: DateTimeUtc,
-        pub name: String,
+        pub name: Option<String>,
         pub is_group: i8,
     }
 

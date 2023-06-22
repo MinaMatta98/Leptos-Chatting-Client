@@ -8,6 +8,7 @@ pub struct UserModel {
     pub last_name: String,
     pub email: String,
     pub phone_number: i64,
+    pub image: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -21,10 +22,10 @@ pub struct ConversationMeta {
     pub id: i32,
     pub last_message_at: String,
     pub created_at: String,
-    pub name: String,
+    pub name: Option<String>,
     pub is_group: i8,
     pub count: usize,
-    pub other_users: Vec<(String, String)>,
+    pub other_users: Vec<(String, String, i32)>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -33,13 +34,66 @@ pub struct UserLogin {
     pub email: String,
 }
 
+#[cfg(feature = "ssr")]
+impl From<users::server::Model> for UserModel {
+    fn from(value: users::server::Model) -> Self {
+        Self {
+            id: value.id,
+            email: value.email,
+            first_name: value.first_name,
+            last_name: value.last_name,
+            phone_number: value.phone_number,
+            image: value.image,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl UserLogin {
+    fn evaluate_user(user: Option<actix_identity::Identity>) -> Result<UserLogin, ServerFnError> {
+        let returned_user: UserLogin;
+        Self::server(match &user.unwrap().id() {
+            Ok(val) => match serde_json::from_str(val) {
+                Ok(val) => {
+                    returned_user = val;
+                    Ok(returned_user)
+                }
+                Err(_) => Err(UserValidation::SerializationError),
+            },
+            Err(_) => Err(UserValidation::NoUser),
+        })
+    }
+
+    fn server(
+        user_evaluation: Result<UserLogin, UserValidation>,
+    ) -> Result<UserLogin, ServerFnError> {
+        match user_evaluation {
+            Ok(val) => Ok(val),
+            Err(e) => Err(ServerFnError::Request(format!(
+                "User evaluation error: {}",
+                serde_json::to_string_pretty(&e).unwrap()
+            ))),
+        }
+    }
+
+    async fn retrieve_user(user: UserLogin, data: &sea_orm::DatabaseConnection) -> UserModel {
+        Users::find()
+            .filter(users::server::Column::Id.eq(user.id))
+            .one(data)
+            .await
+            .unwrap()
+            .map(Into::into)
+            .unwrap()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FacingMessageInfo {
-    pub conversation_id: Option<i32>,
-    pub user_ids: Option<i32>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub email: Option<String>,
+    pub conversation_id: i32,
+    pub user_ids: Vec<i32>,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -50,9 +104,11 @@ pub struct MergedConversation {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ConversationInner {
-    pub user_ids: i32,
+    pub user_ids: Vec<i32>,
     pub first_name: String,
     pub last_name: String,
+    pub is_group: bool,
+    pub name: Option<String>,
     pub messages: Vec<MergedMessages>,
 }
 
@@ -94,7 +150,7 @@ use crate::{
     entities::{conversation, user_conversation},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum UserValidation {
     NoUser,
     SerializationError,
@@ -106,22 +162,23 @@ if #[cfg(feature = "ssr")] {
     use super::entities::prelude::*;
     use super::entities::*;
     use sea_orm::*;
-    use sea_orm::sea_query::OnConflict;
 
 struct RetrieveConversations;
 
     #[derive(Debug, sea_orm::FromQueryResult, Serialize, Clone)]
     struct MessageInfo {
         conversation_id: i32,
+        name: Option<String>,
+        is_group: bool
     }
 
     #[derive(Debug, sea_orm::FromQueryResult)]
     struct ConversationInfo {
-        conversation_id: Option<i32>,
-        user_ids: Option<i32>,
-        first_name: Option<String>,
-        last_name: Option<String>,
-        email: Option<String>
+        conversation_id: i32,
+        user_ids: i32,
+        first_name: String,
+        last_name: String,
+        email: String
     }
 
     #[derive(Debug, sea_orm::FromQueryResult, Serialize, Clone, PartialEq, Deserialize)]
@@ -170,12 +227,30 @@ struct RetrieveConversations;
             }
         }
 
+    impl From<ConversationInfo> for FacingMessageInfo {
+            fn from(value: ConversationInfo) -> Self {
+                Self {
+                    conversation_id: value.conversation_id,
+                    user_ids: vec![value.user_ids],
+                    first_name: value.first_name,
+                    last_name: value.last_name,
+                    email: value.email
+                }
+            }
+    }
+
 
 impl RetrieveConversations {
 
     async fn retrieve_user_conversations(user: &UserLogin, data: &sea_orm::DatabaseConnection) -> Vec<MessageInfo> {
                 UserConversation::find()
                     .filter(user_conversation::server::Column::UserIds.eq(user.id))
+                    .columns::<crate::entities::conversation::server::Column, Vec<_>>(vec![
+                        crate::entities::conversation::server::Column::Id,
+                        crate::entities::conversation::server::Column::Name,
+                        crate::entities::conversation::server::Column::IsGroup,
+                    ])
+                    .inner_join(Conversation)
                     .into_model::<MessageInfo>()
                     .all(data)
                     .await
@@ -185,7 +260,8 @@ impl RetrieveConversations {
     async fn retrieve_associated_users(user: UserLogin, data: &sea_orm::DatabaseConnection, condition: sea_orm::Condition) -> Vec<FacingMessageInfo> {
 
                 let associated_users = UserConversation::find()
-                    .filter(condition).inner_join(Users)
+                    .filter(condition)
+                    .inner_join(Users)
                     .columns::<user_conversation::server::Column, Vec<_>>(vec![
                         user_conversation::server::Column::UserIds,
                         user_conversation::server::Column::ConversationId,
@@ -201,31 +277,16 @@ impl RetrieveConversations {
                     .await
                     .unwrap();
 
-                println!("Associated Users {:?}", associated_users);
                 associated_users
-                    .iter()
-                    .filter_map(|conversation_info| {
-                        if conversation_info.user_ids.unwrap() != user.id && associated_users.iter().any(|conversation|
-                            conversation.conversation_id == conversation_info.conversation_id && user.id == conversation.user_ids.unwrap())
-                        {
-                            Some(FacingMessageInfo {
-                                conversation_id: conversation_info.conversation_id,
-                                user_ids: conversation_info.user_ids,
-                                first_name: conversation_info.first_name.clone(),
-                                last_name: conversation_info.last_name.clone(),
-                                email: conversation_info.email.clone()
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect()
             }
 
-            async fn retrieve_messages(conversations: &Vec<MessageInfo>, data: &sea_orm::DatabaseConnection) -> Vec<MessageStructFacing> {
+            async fn retrieve_messages(conversations: &Vec<i32>, data: &sea_orm::DatabaseConnection) -> Vec<MessageStructFacing> {
                 let mut condition: Condition = Condition::any();
                 for conversation in conversations {
-                    condition = condition.add(message::server::Column::MessageConversationId.eq(conversation.conversation_id));
+                    condition = condition.add(message::server::Column::MessageConversationId.eq(*conversation));
                 }
 
                 Message::find().filter(condition).inner_join(Users).columns::<users::server::Column, Vec<_>>(vec![
@@ -254,6 +315,24 @@ impl RetrieveConversations {
                     .all(data).await.unwrap().into_iter().map(Into::into).collect()
 
             }
+
+            async fn retrieve_images(user_id: i32, data: &sea_orm::DatabaseConnection) -> Option<String> {
+                Users::find().filter(users::server::Column::Id.eq(user_id)).one(data).await.unwrap().unwrap().image
+            }
+
+            // async fn retrieve_group_conversations(name: String, user_ids: Vec<i32>, data: &sea_orm::DatabaseConnection) -> Option<Vec<MergedConversation>> {
+            //     let mut condition = Condition::all().add(user_conversation::server::Column::UserIds.is_in(user_ids)).add(conversation::server::Column::Name.eq(&name));
+
+            //     UserConversation::find()
+            //         .filter(condition)
+            //         .inner_join(Conversation)
+            //         .columns::<crate::entities::conversation::server::Column, Vec<_>>(vec![
+            //             crate::entities::conversation::server::Column::Name,
+            //         ])
+            //         .one(data).await.unwrap()
+            //         .into_iter().map(Into::into).collect()
+
+            // }
 }
 
 pub struct AppendDatabase;
@@ -302,26 +381,36 @@ impl AppendDatabase {
                 }
             }
 
-}
-}
-}
+            async fn delete_conversation(conversation_id: i32, data: &sea_orm::DatabaseConnection, user: UserLogin) {
+                if let Ok(conversation) = Conversation::find().
+                    filter(Condition::all()
+                    .add(conversation::server::Column::Id.eq(conversation_id))
+                    .add(user_conversation::server::Column::UserIds.eq(user.id)))
+                    .reverse_join(UserConversation)
+                    .one(data).await {
+                    conversation.unwrap().delete(data).await.unwrap();
+                }
+            }
 
-#[cfg(feature = "ssr")]
-fn evaluate_user(user: Option<actix_identity::Identity>) -> Result<UserLogin, UserValidation> {
-    let returned_user: UserLogin;
-    match &user.unwrap().id() {
-        Ok(val) => match serde_json::from_str(val) {
-            Ok(val) => {
-                returned_user = val;
-                Ok(returned_user)
+            async fn modify(user: UserLogin, image: Option<String>, data: &sea_orm::DatabaseConnection, first_name: Option<String>, last_name: Option<String>) {
+                let mut user: users::server::ActiveModel = Users::find_by_id(user.id).one(data).await.unwrap().unwrap().into();
+                if let Some(image_path) = image {
+                    user.image = Set(Some(image_path));
+                }
+
+                if let Some(first_name) = first_name {
+                    user.first_name = Set(first_name);
+                }
+
+                if let Some(last_name) = last_name {
+                    user.last_name = Set(last_name);
+                }
+
+                Users::update(user).exec(data).await.unwrap();
             }
-            Err(e) => {
-                println!("Serialization error occured with: {e}");
-                Err(UserValidation::SerializationError)
-            }
-        },
-        Err(_) => Err(UserValidation::NoUser),
-    }
+
+}
+}
 }
 
 #[server(SignUp, "/api", "Url")]
@@ -337,13 +426,13 @@ pub async fn sign_up(
     use rand::Rng;
     use sea_orm::*;
 
-    let mut struct_vector: Vec<Box<dyn validator::Validate>> = Vec::new();
-
-    struct_vector.push(Box::new(form.first_name.clone()));
-    struct_vector.push(Box::new(form.last_name.clone()));
-    struct_vector.push(Box::new(form.email.clone()));
-    struct_vector.push(Box::new(form.password.clone()));
-    struct_vector.push(Box::new(form.phone_number.clone()));
+    let struct_vector: Vec<Box<dyn validator::Validate>> = vec![
+        Box::new(form.first_name.clone()),
+        Box::new(form.last_name.clone()),
+        Box::new(form.email.clone()),
+        Box::new(form.password.clone()),
+        Box::new(form.phone_number.clone()),
+    ];
 
     if struct_vector.iter().any(|item| item.validate().is_err()) {
         Ok(crate::app::FormValidation::Error)
@@ -547,7 +636,6 @@ pub async fn confirm_subscription(
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>| {
             let email = email.clone();
             let input = input.clone();
-            println!("{input}");
             async move {
                 let db = &data.lock().await.connection;
                 if let Ok(user) = TempUsers::find()
@@ -573,11 +661,8 @@ pub async fn confirm_subscription(
                             .await
                             .is_ok()
                         {
-                            println!("User insert route taken");
-                            user.delete(&db.clone()).await.unwrap();
                             Ok(VerificationValidation::Success)
                         } else {
-                            println!("{}", "error route taken");
                             Ok(super::app::VerificationValidation::ServerError)
                         }
                     } else {
@@ -659,16 +744,10 @@ pub async fn login_status(cx: Scope) -> Result<UserLogin, ServerFnError> {
     use actix_identity::Identity;
 
     leptos_actix::extract(cx, move |user: Option<Identity>| async {
-        let user_evaluation = evaluate_user(user);
-        let user: UserLogin;
-        match user_evaluation {
-            Ok(val) => {
-                user = val;
-            }
-            Err(_) => {
-                todo!()
-            }
-        }
+        let user = match UserLogin::evaluate_user(user) {
+            Ok(val) => val,
+            Err(e) => return Err(e),
+        };
         Ok(user)
     })
     .await
@@ -696,31 +775,27 @@ pub async fn get_users(cx: Scope) -> Result<Vec<UserModel>, ServerFnError> {
         cx,
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
               user: Option<actix_identity::Identity>| {
-            let user = evaluate_user(user);
             async move {
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
                 let data = &data.lock().await.connection;
-                Users::find()
+                Ok(Users::find()
                     .order_by_desc(users::server::Column::Id)
-                    .filter(users::server::Column::Id.ne(user.unwrap().id))
+                    .filter(users::server::Column::Id.ne(user.id))
                     .all(data)
                     .await
-                    .unwrap()
+                    .unwrap())
             }
         },
     )
     .await
     .unwrap()
-    .iter()
-    .map(|val| {
-        let val = val.clone();
-        UserModel {
-            email: val.email,
-            first_name: val.first_name,
-            last_name: val.last_name,
-            id: val.id,
-            phone_number: val.phone_number,
-        }
-    })
+    .unwrap()
+    .into_iter()
+    .map(Into::into)
     .rev()
     .collect())
 }
@@ -734,14 +809,16 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
         cx,
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
               user: Option<Identity>| {
-            let user: UserLogin = serde_json::from_str(&user.unwrap().id().unwrap()).unwrap();
-
             async move {
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
                 let data = &data.lock().await.connection;
                 let conversations =
                     RetrieveConversations::retrieve_user_conversations(&user, data).await;
 
-                println!("Conversation {:?}", conversations);
                 let mut condition = Condition::any();
                 for conversation in &conversations {
                     condition = condition.add(
@@ -751,24 +828,26 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
                 }
 
                 let users =
-                    RetrieveConversations::retrieve_associated_users(user, data, condition).await;
+                    RetrieveConversations::retrieve_associated_users(user.clone(), data, condition).await;
 
-                println!("Users {:?}", users);
-
-                let messages = RetrieveConversations::retrieve_messages(&conversations, data).await;
+                let messages = RetrieveConversations::retrieve_messages(
+                    &conversations
+                        .iter()
+                        .map(|conversation| conversation.conversation_id)
+                        .collect(),
+                    data,
+                )
+                .await;
 
                 let seen_messages = RetrieveConversations::retrieve_seen(&messages, data).await;
 
                 let mut vec_merged_conversation = Vec::new();
 
                 for conversation in &conversations {
-                    println!("{}", conversation.conversation_id);
-                    println!("{:?}", users);
-
-                    let users = users
+                    let users: Vec<_> = users
                         .iter()
-                        .find(|user| user.conversation_id.unwrap() == conversation.conversation_id)
-                        .unwrap();
+                        .filter(|user| user.conversation_id == conversation.conversation_id)
+                        .collect();
 
                     let merged_messages: Vec<MergedMessages> = messages
                         .iter()
@@ -794,9 +873,15 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
                     vec_merged_conversation.push(MergedConversation {
                         conversation_id: conversation.conversation_id,
                         conversation: ConversationInner {
-                            user_ids: users.user_ids.unwrap(),
-                            last_name: users.last_name.clone().unwrap(),
-                            first_name: users.first_name.clone().unwrap(),
+                            user_ids: users
+                                .iter()
+                                .rev()
+                                .map(|&users| *users.user_ids.first().unwrap())
+                                .collect(),
+                            last_name: users.iter().find(|&users| *users.user_ids.first().unwrap() != user.id).unwrap().last_name.clone(),
+                            first_name: users.iter().find(|&users| *users.user_ids.first().unwrap() != user.id).unwrap().first_name.clone(),
+                            name: conversation.name.clone(),
+                            is_group: conversation.is_group,
                             messages: merged_messages
                                 .into_iter()
                                 .filter(|message| {
@@ -805,7 +890,6 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
                                 .collect(),
                         },
                     });
-                    // vec_merged_conversation.push(value)
                 }
                 Ok(vec_merged_conversation)
             }
@@ -813,7 +897,6 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
     )
     .await
     .unwrap()
-    // Ok(true)
 }
 
 #[server(Logout, "/api", "Url")]
@@ -827,76 +910,140 @@ pub async fn logout(cx: Scope) -> Result<(), ServerFnError> {
 }
 
 #[server(ConversationAction, "/api", "Url")]
-pub async fn conversation_action(cx: Scope, other_user: i32) -> Result<(), ServerFnError> {
+pub async fn conversation_action(
+    cx: Scope,
+    other_users: Vec<i32>,
+    is_group: bool,
+    name: Option<String>,
+) -> Result<(), ServerFnError> {
     use crate::entities::prelude::*;
     use actix_identity::Identity;
     use iter_tools::prelude::Itertools;
     use sea_orm::prelude::*;
     use sea_orm::*;
 
-    #[derive(FromQueryResult, PartialEq, Eq, Hash)]
+    #[derive(FromQueryResult, PartialEq, Eq, Hash, Debug)]
     struct ExtractedConversation {
         conversation_id: i32,
     }
+
+    if other_users.len().lt(&2) && is_group {
+        return Err(ServerFnError::Args("Not Enough Users Added".to_string()));
+    };
 
     leptos_actix::extract(
         cx,
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
               user: Option<Identity>| {
-            let user_evaluation = evaluate_user(user);
-            let user: UserLogin;
-            match user_evaluation {
-                Ok(val) => {
-                    user = val;
-                }
-                Err(_) => {
-                    todo!()
-                }
-            }
-
+            let other_users = other_users.clone();
+            println!("{:?}", other_users);
+            let name = name.clone();
             async move {
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
                 let data = &data.lock().await.connection;
-                let existing_conversation = UserConversation::find()
+
+                let mut existing_conversation = UserConversation::find()
                     .select_only()
                     .column(user_conversation::server::Column::ConversationId)
+                    .column(user_conversation::server::Column::UserIds)
+                    .column(conversation::server::Column::Name)
+                    .column(conversation::server::Column::Id)
+                    .right_join(Conversation);
+
+                match is_group {
+                    true => {
+                        existing_conversation = existing_conversation
+                            .filter(conversation::server::Column::Name.is_not_null())
+                    }
+                    false => {
+                        existing_conversation = existing_conversation
+                            .filter(conversation::server::Column::Name.is_null())
+                    }
+                };
+
+                let resolved_conversations = existing_conversation
                     .filter(
-                        Condition::any()
-                            .add(user_conversation::server::Column::UserIds.eq(user.id))
-                            .add(user_conversation::server::Column::UserIds.eq(other_user)),
+                        Condition::any().add(
+                            user_conversation::server::Column::UserIds
+                                .is_in(other_users.clone())
+                                .add(user_conversation::server::Column::UserIds.eq(user.id)),
+                        ),
                     )
                     .into_model::<ExtractedConversation>()
                     .all(data)
                     .await
                     .unwrap();
 
-                if existing_conversation.iter().all_unique() || existing_conversation.len().eq(&0) {
-                    log!("Inserting Conversation");
-                    let conversation = Conversation::insert(conversation::server::ActiveModel {
-                        name: ActiveValue::Set(String::from("New Conversation")),
-                        is_group: ActiveValue::Set(0),
-                        ..Default::default()
-                    })
-                    .exec(data)
-                    .await
-                    .unwrap();
+                println!("{resolved_conversations:?}");
+                if resolved_conversations.iter().all_unique() || resolved_conversations.len().eq(&0)
+                {
+                    match is_group {
+                        false => {
+                            log!("Inserting Conversation");
+                            let conversation =
+                                Conversation::insert(conversation::server::ActiveModel {
+                                    is_group: ActiveValue::Set(0),
+                                    name: ActiveValue::Set(None),
+                                    ..Default::default()
+                                })
+                                .exec(data)
+                                .await
+                                .unwrap();
 
-                    for user in [user.id, other_user].iter() {
-                        UserConversation::insert(user_conversation::server::ActiveModel {
-                            user_ids: ActiveValue::Set(*user),
-                            conversation_id: ActiveValue::Set(conversation.last_insert_id),
-                        })
-                        .exec(data)
-                        .await
-                        .unwrap();
+                            for user in [user.id, *other_users.first().unwrap()].iter() {
+                                UserConversation::insert(user_conversation::server::ActiveModel {
+                                    user_ids: ActiveValue::Set(*user),
+                                    conversation_id: ActiveValue::Set(conversation.last_insert_id),
+                                })
+                                .exec(data)
+                                .await
+                                .unwrap();
+                            }
+                        }
+                        true => {
+                            let conversation =
+                                Conversation::insert(conversation::server::ActiveModel {
+                                    is_group: ActiveValue::Set(1),
+                                    name: ActiveValue::Set(name),
+                                    ..Default::default()
+                                })
+                                .exec(data)
+                                .await
+                                .unwrap();
+
+                            let mut vec_users = Vec::new();
+                            [vec![user.id], other_users]
+                                .iter()
+                                .flatten()
+                                .for_each(|&user| {
+                                    vec_users.push(user_conversation::server::ActiveModel {
+                                        user_ids: ActiveValue::Set(user),
+                                        conversation_id: ActiveValue::Set(
+                                            conversation.last_insert_id,
+                                        ),
+                                    })
+                                });
+
+                            UserConversation::insert_many(vec_users)
+                                .exec(data)
+                                .await
+                                .unwrap();
+                        }
                     }
+                    Ok(())
                 } else {
                     log!("Existing Conversation Found");
-                    let conversation = existing_conversation.iter().duplicates().next().unwrap();
+                    Ok(())
                 }
             }
         },
     )
     .await
+    .unwrap()
     .unwrap();
     Ok(())
 }
@@ -908,6 +1055,7 @@ pub async fn validate_conversation(
 ) -> Result<Vec<ConversationMeta>, ServerFnError> {
     use crate::entities::prelude::*;
     use actix_identity::Identity;
+    use iter_tools::Itertools;
     use sea_orm::prelude::*;
     use sea_orm::Condition;
 
@@ -917,73 +1065,69 @@ pub async fn validate_conversation(
               user: Option<Identity>| {
             async move {
                 let data = &data.lock().await.connection;
-                let user_evaluation = evaluate_user(user);
-                let user: UserLogin;
-                match user_evaluation {
-                    Ok(val) => {
-                        user = val;
-                    }
-                    Err(_) => {
-                        todo!()
-                    }
-                }
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
 
                 let user_conversations =
                     RetrieveConversations::retrieve_user_conversations(&user, data).await;
 
-                let mut condition: Condition = Condition::any();
-
-                for conversation in &user_conversations {
-                    condition = condition
-                        .add(conversation::server::Column::Id.eq(conversation.conversation_id))
-                }
+                if !user_conversations
+                    .iter()
+                    .any(|conversation| conversation.conversation_id == desired_conversation_id)
+                {
+                    return Err(ServerFnError::ServerError("Access Denied".to_string()));
+                };
 
                 let conversations = Conversation::find()
-                    .filter(condition)
+                    .filter(conversation::server::Column::Id.eq(desired_conversation_id))
                     .all(data)
                     .await
                     .unwrap();
 
-                let other_condition = Condition::all().add(
-                    user_conversation::server::Column::ConversationId.eq(desired_conversation_id),
-                );
+                let other_users = RetrieveConversations::retrieve_associated_users(
+                    user,
+                    data,
+                    Condition::any().add(
+                        user_conversation::server::Column::ConversationId
+                            .eq(desired_conversation_id),
+                    ),
+                )
+                .await;
 
-                let other_users =
-                    RetrieveConversations::retrieve_associated_users(user, data, other_condition)
-                        .await;
-
-                conversations
+                Ok(conversations
                     .into_iter()
-                    .filter_map(|conversation| {
-                        if conversation.id == desired_conversation_id {
-                            Some(ConversationMeta {
-                                id: conversation.id,
-                                last_message_at: conversation.last_message_at.to_string(),
-                                created_at: conversation.created_at.to_string(),
-                                name: conversation.name,
-                                is_group: conversation.is_group,
-                                count: user_conversations.len(),
-                                other_users: other_users
-                                    .iter()
-                                    .map(|users| {
-                                        (
-                                            users.first_name.clone().unwrap()
-                                                + " "
-                                                + &users.last_name.clone().unwrap(),
-                                            users.email.clone().unwrap(),
-                                        )
-                                    })
-                                    .collect(),
+                    .map(|conversation| ConversationMeta {
+                        id: conversation.id,
+                        last_message_at: conversation.last_message_at.to_string(),
+                        created_at: conversation.created_at.to_string(),
+                        name: conversation.name,
+                        is_group: conversation.is_group,
+                        count: user_conversations.len(),
+                        other_users: other_users
+                            .iter()
+                            .map(|users| {
+                                (
+                                    format!(
+                                        "{} {}",
+                                        users.first_name.clone(),
+                                        &users.last_name.clone()
+                                    ),
+                                    users.email.clone(),
+                                    *users.user_ids.first().unwrap(),
+                                )
                             })
-                        } else {
-                            None
-                        }
+                            .sorted()
+                            .unique()
+                            .collect(),
                     })
-                    .collect()
+                    .collect())
             }
         },
     )
     .await
+    .unwrap()
 }
 
 #[server(ViewMessages, "/api", "Url")]
@@ -991,36 +1135,20 @@ pub async fn view_messages(
     cx: Scope,
     desired_conversation_id: i32,
 ) -> Result<Vec<MergedMessages>, ServerFnError> {
-    use actix_identity::Identity;
-
     leptos_actix::extract(
         cx,
-        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
-              user: Option<Identity>| {
+        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>| {
             async move {
                 let data = &data.lock().await.connection;
-                let user_evaluation = evaluate_user(user);
-                let user: UserLogin;
-                match user_evaluation {
-                    Ok(val) => {
-                        user = val;
-                    }
-                    Err(_) => {
-                        todo!()
-                    }
-                }
-
                 let messages = RetrieveConversations::retrieve_messages(
-                    &vec![MessageInfo {
-                        conversation_id: desired_conversation_id,
-                    }],
-                    data,
+                        &vec![desired_conversation_id],
+                        data
                 )
                 .await;
 
                 let seen_messages = RetrieveConversations::retrieve_seen(&messages, data).await;
 
-                messages
+                Ok(messages
                     .iter()
                     .map(|message| MergedMessages {
                         message_conversation_id: message.message_conversation_id,
@@ -1039,18 +1167,16 @@ pub async fn view_messages(
                         first_name: message.first_name.clone(),
                         last_name: message.last_name.clone(),
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>())
             }
         },
     )
     .await
+    .unwrap()
 }
 
 #[server(AssociatedConversation, "/api", "Url")]
-pub async fn associated_conversation(
-    cx: Scope,
-    other_user: i32,
-) -> Result<Option<i32>, ServerFnError> {
+pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, ServerFnError> {
     use actix_identity::Identity;
     use sea_orm::*;
 
@@ -1060,16 +1186,11 @@ pub async fn associated_conversation(
               user: Option<Identity>| {
             async move {
                 let data = &data.lock().await.connection;
-                let user_evaluation = evaluate_user(user);
-                let user: UserLogin;
-                match user_evaluation {
-                    Ok(val) => {
-                        user = val;
-                    }
-                    Err(_) => {
-                        todo!()
-                    }
-                }
+
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
 
                 let condition = Condition::all().add(
                     user_conversation::server::Column::UserIds
@@ -1077,15 +1198,18 @@ pub async fn associated_conversation(
                         .add(user_conversation::server::Column::UserIds.eq(user.id)),
                 );
 
-                RetrieveConversations::retrieve_associated_users(user, data, condition)
-                    .await
-                    .first()
-                    .unwrap()
-                    .conversation_id
+                Ok(
+                    RetrieveConversations::retrieve_associated_users(user, data, condition)
+                        .await
+                        .first()
+                        .unwrap()
+                        .conversation_id,
+                )
             }
         },
     )
     .await
+    .unwrap()
 }
 
 #[server(HandleMessageInput, "/api", "Url")]
@@ -1097,13 +1221,13 @@ pub async fn handle_message_input(
 ) -> Result<(), ServerFnError> {
     use crate::entities::message;
     use actix_identity::Identity;
-    use sea_orm::prelude::*;
 
     if body.is_none() && image.is_none() {
         return Err(server_fn::ServerFnError::MissingArg(String::from(
             "Body Missing",
         )));
     }
+
     leptos_actix::extract(
         cx,
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
@@ -1112,19 +1236,14 @@ pub async fn handle_message_input(
             let image = image.clone();
             async move {
                 let data = &data.lock().await.connection;
-                let user_evaluation = evaluate_user(user);
-                let user: UserLogin;
-                match user_evaluation {
-                    Ok(val) => {
-                        user = val;
-                    }
-                    Err(_) => {
-                        todo!()
-                    }
-                }
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
                 let mut image_location: Option<String> = Default::default();
-                image.map(|image_vec| {
-                    println!("image is some");
+
+                if let Some(image_vec) = image {
                     let current_time = std::time::UNIX_EPOCH
                         .elapsed()
                         .unwrap()
@@ -1138,7 +1257,7 @@ pub async fn handle_message_input(
                     std::fs::write("./upload/".to_string() + &current_time + ".png", image_vec)
                         .ok();
                     image_location = Some("/upload/".to_string() + &current_time + ".png")
-                });
+                };
 
                 AppendDatabase::insert_messages(
                     data,
@@ -1150,11 +1269,13 @@ pub async fn handle_message_input(
                         ..Default::default()
                     },
                 )
-                .await
+                .await;
+                Ok(())
             }
         },
     )
     .await
+    .unwrap()
 }
 
 #[server(FindImage, "/api", "Url")]
@@ -1181,28 +1302,204 @@ pub async fn handle_seen(cx: Scope, conversation_id: i32) -> Result<(), ServerFn
               user: Option<Identity>| {
             async move {
                 let data = &data.lock().await.connection;
-                let user_evaluation = evaluate_user(user);
-                let user: UserLogin;
-                match user_evaluation {
-                    Ok(val) => {
-                        user = val;
-                    }
-                    Err(_) => {
-                        todo!()
-                    }
-                }
-                let messages: Vec<i32> = RetrieveConversations::retrieve_messages(
-                    &vec![MessageInfo { conversation_id }],
-                    data,
-                )
-                .await
-                .iter()
-                .map(|messages| messages.message_id)
-                .collect();
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
 
-                AppendDatabase::insert_seen(data, messages, user.id).await
+                let messages: Vec<i32> =
+                    RetrieveConversations::retrieve_messages(&vec![conversation_id], data)
+                        .await
+                        .iter()
+                        .map(|messages| messages.message_id)
+                        .collect();
+
+                AppendDatabase::insert_seen(data, messages, user.id).await;
+                Ok(())
             }
         },
     )
     .await
+    .unwrap()
+}
+
+#[server(DeleteConversation, "/api", "Url")]
+pub async fn delete_conversations(cx: Scope, conversation_id: i32) -> Result<(), ServerFnError> {
+    use actix_identity::Identity;
+
+    leptos_actix::extract(
+        cx,
+        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
+              user: Option<Identity>| {
+            async move {
+                let data = &data.lock().await.connection;
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
+                AppendDatabase::delete_conversation(conversation_id, data, user).await;
+                Ok(())
+            }
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[server(GetUser, "/api", "Url")]
+pub async fn get_user(cx: Scope) -> Result<UserModel, ServerFnError> {
+    use actix_identity::Identity;
+    leptos_actix::extract(
+        cx,
+        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
+              user: Option<Identity>| {
+            async move {
+                let data = &data.lock().await.connection;
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+                Ok(UserLogin::retrieve_user(user, data).await)
+            }
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[server(UploadImage, "/api", "Url")]
+pub async fn upload_user_info(
+    cx: Scope,
+    image: Option<Vec<u8>>,
+    first_name: Option<String>,
+    last_name: Option<String>,
+) -> Result<(), ServerFnError> {
+    use actix_identity::Identity;
+    use validator::Validate;
+    leptos_actix::extract(
+        cx,
+        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
+              user: Option<Identity>| {
+            let image = image.clone();
+            let first_name = first_name.clone();
+            let last_name = last_name.clone();
+            async move {
+                let data = &data.lock().await.connection;
+                let user = match UserLogin::evaluate_user(user) {
+                    Ok(val) => val,
+                    Err(e) => return Err(e),
+                };
+
+                let mut validation_vec = Vec::new();
+
+                [
+                    ("first name".to_string(), first_name.clone()),
+                    ("last_name".to_string(), last_name.clone()),
+                ]
+                .into_iter()
+                .for_each(|(entry, name)| {
+                    if let Some(name) = name {
+                        let schema = crate::app::NameSchema { entry: name };
+                        match schema.validate() {
+                            Ok(_) => (),
+                            Err(e) => validation_vec.push((entry, e)),
+                        }
+                    }
+                });
+
+                if validation_vec.len().gt(&0) {
+                    let mut validation_string = String::new();
+                    for error in validation_vec {
+                        validation_string.push_str(
+                            &(format!(
+                                "Entry {} failed to register with error {}\n",
+                                error.0, error.1
+                            )),
+                        )
+                    }
+                    return Err(ServerFnError::Args(format!(
+                        "Error occured while validating fields:
+                            {validation_string}"
+                    )));
+                }
+
+                if let Some(image) = image {
+                    let kind = infer::get(&image).expect("file type is known");
+                    if kind.mime_type() != "image/jpeg" && kind.mime_type() != "image/png" {
+                        return Err(ServerFnError::Args(format!("Incorrect Mime Type {}", kind)));
+                    };
+                    let current_time = std::time::UNIX_EPOCH
+                        .elapsed()
+                        .unwrap()
+                        .as_secs()
+                        .to_string();
+
+                    if std::fs::metadata("./images").is_err() {
+                        std::fs::create_dir_all("./images").unwrap();
+                    };
+
+                    let image_path = "images/".to_string() + &current_time + ".png";
+                    std::fs::write(&image_path, image).unwrap();
+
+                    AppendDatabase::modify(
+                        user,
+                        Some(image_path),
+                        data,
+                        first_name.clone(),
+                        last_name.clone(),
+                    )
+                    .await;
+                } else {
+                    AppendDatabase::modify(user, None, data, first_name.clone(), last_name.clone())
+                        .await;
+                }
+
+                Ok(())
+            }
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[server(GetImages, "/api", "Url")]
+pub async fn get_image(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnError> {
+    use std::io::Read;
+    leptos_actix::extract(
+        cx,
+        move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>| {
+            async move {
+                let data = &data.lock().await.connection;
+                let image = RetrieveConversations::retrieve_images(id, data).await;
+                if let Some(image) = image {
+                         let path = std::env::current_dir()
+                             .unwrap()
+                             .join(image);
+
+                         let mut file = std::fs::File::open(path).unwrap();
+                         let mut buffer = Vec::new();
+                         file.read_to_end(&mut buffer).unwrap();
+                         Some(buffer)
+                } else {
+                    None
+                }
+            }
+        },
+    )
+    .await
+}
+
+#[server(CreateGroupConversation, "/api", "Url")]
+pub async fn create_group_conversations(
+    cx: Scope,
+    other_users: String,
+    is_group: bool,
+    name: Option<String>,
+) -> Result<(), ServerFnError> {
+    let other_users_vec: Vec<i32> = other_users
+        .split(',')
+        .map(|user_ids| user_ids.parse::<i32>().expect("Invalid user selection"))
+        .collect();
+    conversation_action(cx, other_users_vec, is_group, name).await
 }

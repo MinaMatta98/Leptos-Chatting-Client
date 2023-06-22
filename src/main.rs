@@ -1,7 +1,8 @@
 #![feature(let_chains)]
 #![feature(async_closure)]
 use actix_web::{
-    cookie::Key, dev, get, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+    cookie::Key, dev, get, http::StatusCode, App, Error, HttpRequest, HttpResponse, HttpServer,
+    Responder,
 };
 use futures_util::future;
 pub use sea_orm::{Database, DbErr, *};
@@ -58,16 +59,36 @@ async fn clear_temp_db() {
     }
 }
 
-#[get("/upload/{image_path}")]
-async fn image_path(path: actix_web::web::Path<String>) -> impl Responder {
+fn render_images(folder: &str ,path: actix_web::web::Path<String>) -> Vec<u8> {
     use std::io::Read;
+
     let path = std::env::current_dir()
         .unwrap()
-        .join("upload/".to_string() + &path.to_string());
+        .join(folder.to_string() + "/" + &path);
+
     let mut file = std::fs::File::open(path).unwrap();
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).unwrap();
     buffer
+}
+
+#[get("/upload/{image_path}")]
+async fn image_path(
+    path: actix_web::web::Path<String>,
+    req: HttpRequest,
+) -> HttpResponse {
+    let buffer = render_images("upload",path);
+    HttpResponse::Ok().body(buffer).respond_to(&req)
+}
+
+
+#[get("/images/{image_path}")]
+async fn upload_path(
+    path: actix_web::web::Path<String>,
+    req: HttpRequest,
+) -> HttpResponse {
+    let buffer = render_images("images",path);
+    HttpResponse::Ok().body(buffer).respond_to(&req)
 }
 
 #[cfg(feature = "ssr")]
@@ -80,9 +101,10 @@ async fn main() -> std::io::Result<()> {
     use actix_files::Files;
     use actix_web::middleware::{Compress, Logger, NormalizePath};
     use server_function::{
-        AssociatedConversation, ConfirmSubscription, ConversationAction, FindImage,
-        GetConversations, GetUsers, HandleMessageInput, HandleSeen, Login, LoginStatus, Logout,
-        Redirect, SignUp, Validate, ValidateConversation, VerifyEmail, ViewMessages,
+        AssociatedConversation, ConfirmSubscription, ConversationAction, DeleteConversation,
+        FindImage, GetConversations, GetUser, GetUsers, HandleMessageInput, HandleSeen, Login,
+        LoginStatus, Logout, Redirect, SignUp, UploadImage, Validate, ValidateConversation,
+        VerifyEmail, ViewMessages, GetImages, CreateGroupConversation
     };
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;
@@ -102,6 +124,7 @@ async fn main() -> std::io::Result<()> {
     LoginStatus::register().unwrap();
     Redirect::register().unwrap();
     GetUsers::register().unwrap();
+    GetUser::register().unwrap();
     GetConversations::register().unwrap();
     ConversationAction::register().unwrap();
     ViewMessages::register().unwrap();
@@ -110,6 +133,10 @@ async fn main() -> std::io::Result<()> {
     HandleMessageInput::register().unwrap();
     HandleSeen::register().unwrap();
     FindImage::register().unwrap();
+    DeleteConversation::register().unwrap();
+    UploadImage::register().unwrap();
+    GetImages::register().unwrap();
+    CreateGroupConversation::register().unwrap();
 
     tokio::task::spawn_local(clear_temp_db());
 
@@ -150,6 +177,7 @@ async fn main() -> std::io::Result<()> {
                 actix_web::middleware::TrailingSlash::Trim,
             ))
             .service(image_path)
+            .service(upload_path)
             .service(Files::new("/", site_root))
     })
     .bind(&addr)?

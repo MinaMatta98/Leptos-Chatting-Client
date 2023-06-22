@@ -26,6 +26,11 @@ pub struct EmailContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct DrawerContext {
+    pub status: RwSignal<bool>,
+}
+
+#[derive(Debug, Clone)]
 pub struct IsOpen {
     pub status: RwSignal<bool>,
 }
@@ -155,9 +160,9 @@ pub fn App(cx: Scope) -> impl IntoView {
     let (email_context, email_context_setter) = create_signal(cx, String::from(""));
     let (signup_context, signup_context_setter) = create_signal(cx, false);
     let is_open = create_rw_signal(cx, false);
-    let empty_state = create_rw_signal(cx, true);
-    let selected = create_rw_signal(cx, false);
+    let drawer_context = create_rw_signal(cx, false);
 
+    provide_context(cx, DrawerContext { status: drawer_context });
     provide_context(cx, IsOpen { status: is_open });
     provide_context(
         cx,
