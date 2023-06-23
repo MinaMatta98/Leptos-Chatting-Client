@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use base64::{engine::general_purpose, Engine as _};
@@ -12,16 +11,15 @@ use leptos::{
 };
 use leptos_icons::*;
 use leptos_router::*;
-use web_sys::{FormData, HtmlFormElement, HtmlLiElement, MouseEvent, SubmitEvent};
+use web_sys::{MouseEvent, SubmitEvent};
 
 use crate::{
     app::IsOpen,
     server_function::{
         self, associated_conversation, conversation_action, delete_conversations, find_image,
         get_conversations, get_image, get_user, get_users, handle_message_input, handle_seen,
-        upload_user_info, validate_conversation, view_messages, ConversationAction,
-        ConversationMeta, CreateGroupConversation, ImageAvailability, MergedConversation,
-        MergedMessages, UserModel,
+        upload_user_info, validate_conversation, view_messages, ConversationMeta,
+        CreateGroupConversation, ImageAvailability, MergedConversation, MergedMessages, UserModel,
     },
 };
 
@@ -389,16 +387,16 @@ fn UserList(cx: Scope) -> impl IntoView {
 
 #[component]
 fn UserBox(cx: Scope) -> impl IntoView {
-    fn callback(cx: Scope, id: i32) -> impl Fn(MouseEvent) {
-        move |_event: MouseEvent| {
-            let _ = create_local_resource(
-                cx,
-                || (),
-                move |_| async move { conversation_action(cx, vec![id], false, None).await },
-            );
-        }
-    }
     let users_arr = create_resource(cx, || (), move |_| async move { get_users(cx).await });
+    let on_click = move |id: i32, cx: Scope| {
+                spawn_local(async move { 
+                conversation_action(cx, vec![id], false, None).await.unwrap(); 
+                let conversation_id = associated_conversation(cx, id).await.unwrap();
+                queue_microtask(move || use_navigate(cx)(&format!("/conversations/{conversation_id}"), Default::default()).unwrap());
+        });
+                
+    };
+
     view! {cx,
         <Suspense fallback=loading_fallback(cx)>
             {move || users_arr.read(cx).map(|items| {
@@ -408,34 +406,24 @@ fn UserBox(cx: Scope) -> impl IntoView {
                           each=move || items.clone()
                           key=|items| items.id
                           view=move |cx, item: UserModel| {
-                            let id = create_local_resource(cx, ||(), move |_| async move {associated_conversation(cx, item.id).await});
-                            let name = create_rw_signal(cx, format!("{} {}", item.first_name, item.last_name));
-                            view! {
-                              cx,
-                                <Suspense fallback=||()>
-                                    {move || id.read(cx).map(|conversation_id|
                                         view!{cx,
-                                         <A href=format!("/conversations/{}", conversation_id.unwrap())>
                                              <div class="w-full relative flex
                                                  items-center space-x-3 bg-white
                                                  p-3 hover:bg-neutral-100 rounded-lg
                                                  transition cursor-pointer"
-                                                 on:click=callback(cx, item.id)
+                                                 on:click=move |_| on_click(item.id, cx)
                                                  >
                                                      <Avatar id=item.id/>
                                                      <div class="min-w-0 flex-1">
                                                          <div class="focus:outline-none">
                                                              <div class="flex justify-between items-center mb-1">
                                                                  <p class="text-sm font-medium text-gray-900">
-                                                                     {move || name.get()}
+                                                                     {format!("{} {}", item.first_name, item.last_name)}
                                                                  </p>
                                                              </div>
                                                          </div>
                                                      </div>
                                              </div>
-                                         </A>
-                                        })}
-                                </Suspense>
                                   }
                           }
                         />
@@ -537,8 +525,8 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
     let query = move || {
         use_location(cx)
             .pathname
-            .get()
-            .contains(&cloned_item.conversation_id.to_string())
+            .get().split('/').last().unwrap()
+            .eq(&cloned_item.conversation_id.to_string())
     };
 
     view! {cx,
@@ -1094,17 +1082,21 @@ where
 
 #[component]
 fn ConfirmModal(cx: Scope) -> impl IntoView {
-    let drawer_context = use_context::<DrawerContext>(cx).unwrap().status;
+    let drawer_context = move || use_context::<DrawerContext>(cx).unwrap().status;
     let on_click = move |_| {
         spawn_local(async move {
             delete_conversations(cx, get_current_id(cx)())
                 .await
-                .unwrap()
+                .unwrap();
+            drawer_context().set(false);
+            queue_microtask(move || {
+                let _ = use_navigate(cx)("/conversations", Default::default());
+            })
         })
     };
 
     view! {cx,
-        <Modal context=drawer_context>
+        <Modal context=drawer_context()>
             <div class="sm:flex sm:items-start">
                 <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center rounded-full justify-center bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
                     <Icon icon=FiIcon::FiAlertTriangle class="h-6 w-6 text-red-600"/>
@@ -1121,9 +1113,9 @@ fn ConfirmModal(cx: Scope) -> impl IntoView {
             </div>
             </div>
         <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-            <Button on_click=on_click button_type="button" disabled=ButtonVal::Bool(false) color="bg-rose-500 hover:bg-rose-600 focus-visible:outline-rose-600">
-                "Delete"
-            </Button>
+                <Button on_click=on_click button_type="button" disabled=ButtonVal::Bool(false) color="bg-rose-500 hover:bg-rose-600 focus-visible:outline-rose-600">
+                    "Delete"
+                </Button>
         </div>
         </Modal>
     }

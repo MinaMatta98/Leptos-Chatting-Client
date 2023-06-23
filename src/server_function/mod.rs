@@ -272,6 +272,10 @@ impl RetrieveConversations {
                         crate::entities::users::server::Column::LastName,
                         crate::entities::users::server::Column::Email,
                     ])
+                    .columns::<crate::entities::conversation::server::Column, Vec<_>>(vec![
+                        crate::entities::conversation::server::Column::IsGroup,
+                    ])
+                    .inner_join(Conversation)
                     .into_model::<ConversationInfo>()
                     .all(data)
                     .await
@@ -1202,11 +1206,13 @@ pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, 
                     Err(e) => return Err(e),
                 };
 
-                let condition = Condition::all().add(
-                    user_conversation::server::Column::UserIds
-                        .eq(other_user)
-                        .add(user_conversation::server::Column::UserIds.eq(user.id)),
-                );
+                let condition = Condition::all()
+                    .add(
+                        Condition::any()
+                            .add(user_conversation::server::Column::UserIds.eq(other_user))
+                            .add(user_conversation::server::Column::UserIds.eq(user.id)),
+                    )
+                    .add(conversation::server::Column::IsGroup.eq(0));
 
                 let conversations =
                     RetrieveConversations::retrieve_associated_users(user.clone(), data, condition)
@@ -1219,6 +1225,7 @@ pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, 
                     })
                     .collect::<Vec<_>>();
 
+                println!("{:?}", user_conversation);
                 Ok(conversations
                     .iter()
                     .find_map(|conversations| {

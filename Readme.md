@@ -8,6 +8,7 @@ This repository demonstrates the use of the following technologies:
 * [Sea-Orm](https://github.com/SeaQL/sea-orm): Asynchronous Object Relational Mapping (ORM) used for the management of MySQL Databases.
 * [Tailwind-Css](https://tailwindcss.com/): Styles on the go.
 * [Redis](https://redis.io/): User Session Management via Redis value stores.
+* [Askama](https://github.com/djc/askama): Templating Engine for automating verification and sign-up emails.
 
 ## Features
 * User Authentication and Verification
