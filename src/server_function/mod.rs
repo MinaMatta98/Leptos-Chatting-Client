@@ -1208,15 +1208,6 @@ pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, 
                         .add(user_conversation::server::Column::UserIds.eq(user.id)),
                 );
 
-                println!(
-                    "RetrieveConversations {:?}",
-                    RetrieveConversations::retrieve_associated_users(
-                        user.clone(),
-                        data,
-                        condition.clone()
-                    )
-                    .await
-                );
                 let conversations =
                     RetrieveConversations::retrieve_associated_users(user.clone(), data, condition)
                         .await;

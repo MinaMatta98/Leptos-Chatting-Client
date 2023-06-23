@@ -43,3 +43,14 @@ To run this project after compilation, run the following command:
 ```bash
 docker run -p 8000:8000 zing
 ```
+
+For effective use, create 3 different user accounts to experiment with group chat functionality. Note that this will require three seperate emails, as email verification is required for sign-up.
+
+A burner email is used for the verification process for demonstrative purposes.
+
+## Coming Soon
+The following features will be implemented soon:
+
+* Introduction of Web-Socket for real time reactivity via [Actix-Actors](https://actix.rs/docs/websockets/). This will involve a manual implementation of [pusher](https://pusher.com/) functionality.
+* Client Side Reactivity via [leptos-server-signal](https://github.com/tqwewe/leptos_server_signal).
+* Improvements to the sign-up and login user interface.
