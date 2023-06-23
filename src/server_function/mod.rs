@@ -783,7 +783,7 @@ pub async fn get_users(cx: Scope) -> Result<Vec<UserModel>, ServerFnError> {
 
                 let data = &data.lock().await.connection;
                 Ok(Users::find()
-                    .order_by_desc(users::server::Column::Id)
+                    .order_by_asc(users::server::Column::Id)
                     .filter(users::server::Column::Id.ne(user.id))
                     .all(data)
                     .await
@@ -828,7 +828,8 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
                 }
 
                 let users =
-                    RetrieveConversations::retrieve_associated_users(user.clone(), data, condition).await;
+                    RetrieveConversations::retrieve_associated_users(user.clone(), data, condition)
+                        .await;
 
                 let messages = RetrieveConversations::retrieve_messages(
                     &conversations
@@ -878,8 +879,18 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
                                 .rev()
                                 .map(|&users| *users.user_ids.first().unwrap())
                                 .collect(),
-                            last_name: users.iter().find(|&users| *users.user_ids.first().unwrap() != user.id).unwrap().last_name.clone(),
-                            first_name: users.iter().find(|&users| *users.user_ids.first().unwrap() != user.id).unwrap().first_name.clone(),
+                            last_name: users
+                                .iter()
+                                .find(|&users| *users.user_ids.first().unwrap() != user.id)
+                                .unwrap()
+                                .last_name
+                                .clone(),
+                            first_name: users
+                                .iter()
+                                .find(|&users| *users.user_ids.first().unwrap() != user.id)
+                                .unwrap()
+                                .first_name
+                                .clone(),
                             name: conversation.name.clone(),
                             is_group: conversation.is_group,
                             messages: merged_messages
@@ -978,7 +989,6 @@ pub async fn conversation_action(
                     .await
                     .unwrap();
 
-                println!("{resolved_conversations:?}");
                 if resolved_conversations.iter().all_unique() || resolved_conversations.len().eq(&0)
                 {
                     match is_group {
@@ -1198,13 +1208,40 @@ pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, 
                         .add(user_conversation::server::Column::UserIds.eq(user.id)),
                 );
 
-                Ok(
-                    RetrieveConversations::retrieve_associated_users(user, data, condition)
-                        .await
-                        .first()
-                        .unwrap()
-                        .conversation_id,
-                )
+                println!(
+                    "RetrieveConversations {:?}",
+                    RetrieveConversations::retrieve_associated_users(
+                        user.clone(),
+                        data,
+                        condition.clone()
+                    )
+                    .await
+                );
+                let conversations =
+                    RetrieveConversations::retrieve_associated_users(user.clone(), data, condition)
+                        .await;
+
+                let user_conversation = conversations
+                    .iter()
+                    .filter(|conversations| {
+                        *conversations.user_ids.first().unwrap() == user.clone().id
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(conversations
+                    .iter()
+                    .find_map(|conversations| {
+                        if *conversations.user_ids.first().unwrap() != user.id
+                            && user_conversation.iter().any(|user_conversation| {
+                                user_conversation.conversation_id == conversations.conversation_id
+                            })
+                        {
+                            Some(conversations.conversation_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap())
             }
         },
     )

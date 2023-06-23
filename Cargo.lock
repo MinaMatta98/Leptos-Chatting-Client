@@ -793,6 +793,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfb"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d38f2da7a0a2c4ccf0065be06397cc26a81f4e528be095826eee9d4adbb8c60f"
+dependencies = [
+ "byteorder",
+ "fnv",
+ "uuid",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1521,6 +1532,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloo-net"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3000ef231a67d5bfee6b35f2c0f6f5c8d45b3381ef5bbbea603690ec4e539762"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils",
+ "http",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "gloo-utils"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1773,6 +1805,7 @@ dependencies = [
  "icondata_ai",
  "icondata_bi",
  "icondata_core",
+ "icondata_fi",
  "icondata_hi",
  "icondata_io",
  "icondata_lu",
@@ -1802,6 +1835,15 @@ name = "icondata_core"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1640a4c1d5ddd08ab1d9854ffa7a2fa3dc52339492676b6d3031e77ca579f434"
+
+[[package]]
+name = "icondata_fi"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a2086642395cc2fd1e3a6ba6cf0bf2cbb7cfcba6352b4c07f8f859abcdcbbcc"
+dependencies = [
+ "icondata_core",
+]
 
 [[package]]
 name = "icondata_hi"
@@ -1880,6 +1922,15 @@ checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
  "autocfg",
  "hashbrown 0.12.3",
+]
+
+[[package]]
+name = "infer"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f551f8c3a39f68f986517db0d1759de85881894fdc7db798bd2a9df9cb04b7fc"
+dependencies = [
+ "cfb",
 ]
 
 [[package]]
@@ -2005,9 +2056,9 @@ dependencies = [
 
 [[package]]
 name = "leptos"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe36d83573a516cc946e450e761de44d7f7a6712f12ac5c933828cf07be7c84"
+checksum = "ed6a26202c452a2bf4076cd92f383f591222feffeb300abc0e9a17f1cb57b6dd"
 dependencies = [
  "cfg-if",
  "leptos_config",
@@ -2022,9 +2073,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_actix"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7af324cebb34a6b195d39368cec83ae265d1f43573b4bc995eb2747563e9fd9"
+checksum = "e11679cbec319718b0e7e6415bcd89b2b9d1922211640cdde8f299995c62203e"
 dependencies = [
  "actix-web",
  "futures",
@@ -2040,9 +2091,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_config"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6af95485b90528c3fa15a059a6e35be8a557020ca2a582281ca90c41c88de6b8"
+checksum = "3cb399f129989b020e3f4b699d581881c7e5586af68df9eefef898c1fc6b7246"
 dependencies = [
  "config",
  "regex",
@@ -2053,9 +2104,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_dom"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88312b61ed5230ba20d93b65c4153112faf2a504b12964329d6ba667fef3660d"
+checksum = "a9a8047581232718d8084539e64a06be4dd5075d1f4a42454adf9a297b190f47"
 dependencies = [
  "async-recursion",
  "cfg-if",
@@ -2081,9 +2132,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_hot_reload"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dadebc0acf011650a12c4c6c6da00f9fd4dd060432b13a598e504859d4a289ab"
+checksum = "03b85b6dfc7d635f928a480aa349e4f93fef9f8d36b487492b0f0655282a55a0"
 dependencies = [
  "anyhow",
  "camino",
@@ -2110,9 +2161,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_integration_utils"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4271c716549a73005851139551956e0885924964966f41297b3b3163148e1bcb"
+checksum = "1b7d8fce9461f0768accd659d99e12be39e033d4563d944fba2bc1c9c2b1fd98"
 dependencies = [
  "futures",
  "leptos",
@@ -2124,9 +2175,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_macro"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ca142971dfedfd7e7e6c3ceadf77cfcb39ec7fc9cd0fc438308850bf6ef133b"
+checksum = "15ca34bd6cc23e6f5c5282fdadfa9890186a7978e66e793d6e3aa69123f4f6ee"
 dependencies = [
  "attribute-derive",
  "cfg-if",
@@ -2147,9 +2198,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_meta"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43563beae31d109512d142f4b76a05ee103bd3583a9d9cbe1d6245c695cc5e89"
+checksum = "5158c38698d778c5a74687e4778bd1ec32d8328e9fff2d3cfc6a2595417a6e15"
 dependencies = [
  "cfg-if",
  "indexmap",
@@ -2161,17 +2212,17 @@ dependencies = [
 
 [[package]]
 name = "leptos_reactive"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43223e5d172e5986a31a0d5f40b10813c4c3a43b52a8cab1993f27df4bea975"
+checksum = "5b201b7963dadb2928220bc59dd4692dc501ea5698d594c362c03b4b742c45f8"
 dependencies = [
  "base64 0.21.2",
  "cfg-if",
  "futures",
  "indexmap",
  "js-sys",
- "ouroboros",
  "rustc-hash",
+ "self_cell",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -2186,14 +2237,14 @@ dependencies = [
 
 [[package]]
 name = "leptos_router"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d0ea7e26694aa16e468603782f4bb47df7948ce24611b71946b6db7bcb0237c"
+checksum = "ba4293fc132a75fdcf893b138e7689951bb86044c1ae6d6b553df747a1f6f59b"
 dependencies = [
  "cached",
  "cfg-if",
  "common_macros",
- "gloo-net",
+ "gloo-net 0.2.6",
  "js-sys",
  "lazy_static",
  "leptos",
@@ -2215,9 +2266,9 @@ dependencies = [
 
 [[package]]
 name = "leptos_server"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1f59485c84aef325cd51739f90eabc46e0e1543adbb92249c49181ab292ea2"
+checksum = "c03d159d44682a631acca44b8310a3acf070e27b1fa2484ed3e43019b0dec840"
 dependencies = [
  "lazy_static",
  "leptos_reactive",
@@ -3481,6 +3532,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "self_cell"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c309e515543e67811222dbc9e3dd7e1056279b782e1dacffe4242b718734fb6"
+
+[[package]]
 name = "semver"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3562,13 +3619,13 @@ dependencies = [
 
 [[package]]
 name = "server_fn"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4f115508f94ea61b6e9ed5f4ecd1926ad283b143680183c65dc450c20c8520a"
+checksum = "ae1f0093213fa26e5a2edd4f1c993b2d0032928ed38f97c7285641f9ddf9a56f"
 dependencies = [
  "ciborium",
  "const_format",
- "gloo-net",
+ "gloo-net 0.2.6",
  "js-sys",
  "once_cell",
  "proc-macro2",
@@ -3585,9 +3642,9 @@ dependencies = [
 
 [[package]]
 name = "server_fn_macro"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d5116d3562bdbb071edac2ddf7b968b30c02205d7600a28ca69e93ddfe5d5e5"
+checksum = "98ef13e46465ce7ac650129e339d056abda6e7f7b1b801783354ac2889e78a38"
 dependencies = [
  "const_format",
  "proc-macro-error",
@@ -3600,9 +3657,9 @@ dependencies = [
 
 [[package]]
 name = "server_fn_macro_default"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ab3fad24963db0985b72303042351bc21d3af985f59d5aaf760480c21051c73"
+checksum = "997aa78552ab454494a79d13bc8bc0f0d0936449569589392ef2ef4d32ff3d5d"
 dependencies = [
  "server_fn_macro",
  "syn 1.0.109",
@@ -4639,7 +4696,8 @@ dependencies = [
  "futures-util",
  "getrandom",
  "gloo-file",
- "gloo-net",
+ "gloo-net 0.3.0",
+ "infer",
  "iter_tools",
  "lazy_static",
  "leptos",

@@ -6,7 +6,10 @@ use std::{
 
 use base64::{engine::general_purpose, Engine as _};
 use lazy_static::lazy_static;
-use leptos::{html::Input, *};
+use leptos::{
+    html::{Div, Input},
+    *,
+};
 use leptos_icons::*;
 use leptos_router::*;
 use web_sys::{FormData, HtmlFormElement, HtmlLiElement, MouseEvent, SubmitEvent};
@@ -61,7 +64,7 @@ enum ButtonVal {
 pub struct SidebarIcon<'a> {
     _label: &'a str,
     href: &'a str,
-    icon: Icon,
+    icon: HiIcon,
     active: Box<dyn Fn(Scope) -> &'a str>,
     on_click: Option<Box<dyn std::ops::Fn(Scope)>>,
 }
@@ -71,40 +74,32 @@ impl<'a> SidebarIcon<'a> {
         let chat = SidebarIcon {
             _label: "Chat",
             href: "/conversations",
-            icon: Icon::Hi(leptos_icons::HiIcon::HiChatBubbleOvalLeftEllipsisSolidMd),
+            icon: HiIcon::HiChatBubbleOvalLeftEllipsisSolidMd,
             active: Box::new(move |_| {
                 let path = use_location(cx).pathname.get();
                 path.contains("conversations")
                     .then_some("bg-gray-100 text-black")
                     .map_or_else(|| "", |v| v)
             }),
-            on_click: Some(Box::new(move |_| {
-                queue_microtask(move || {
-                    let _ = leptos_router::use_navigate(cx)("/conversations", Default::default());
-                })
-            })),
+            on_click: None,
         };
 
         let users = SidebarIcon {
             _label: "Users",
-            href: "/users",
-            icon: Icon::Hi(leptos_icons::HiIcon::HiUserCircleSolidMd),
+            href: "/user",
+            icon: HiIcon::HiUserCircleSolidMd,
             active: Box::new(move |_| {
                 (use_location(cx).pathname.get().as_str() == "/user")
                     .then_some("bg-gray-100 text-black")
                     .map_or_else(|| "", |v| v)
             }),
-            on_click: Some(Box::new(move |_| {
-                queue_microtask(move || {
-                    let _ = leptos_router::use_navigate(cx)("/user", Default::default());
-                })
-            })),
+            on_click: None,
         };
 
         let logout = SidebarIcon {
             _label: "Logout",
-            href: "#",
-            icon: Icon::Hi(leptos_icons::HiIcon::HiArrowLeftCircleOutlineLg),
+            href: "/login",
+            icon: HiIcon::HiArrowLeftCircleOutlineLg,
             active: Box::new(move |_| ""),
             on_click: Some(Box::new(|cx| {
                 create_resource(
@@ -112,7 +107,7 @@ impl<'a> SidebarIcon<'a> {
                     || (),
                     async move |_| server_function::logout(cx).await.unwrap(),
                 );
-                queue_microtask(move || use_navigate(cx)("/", Default::default()).unwrap());
+                // queue_microtask(move || use_navigate(cx)("/login", Default::default()).unwrap());
             })),
         };
 
@@ -264,13 +259,13 @@ fn MobileFooter(cx: Scope) -> impl IntoView {
                     <div class="fixed justify-between
                     w-screen bottom-0 z-40 flex items-center
                     bg-white border-t-[1px] lg:hidden">
-                <For each=move || SidebarIcon::init(cx)
-                  key=|vec| vec.href.to_string()
-                  view=move |cx, item: SidebarIcon| {
-                    view! {cx, <MobileItem item />}
-                }/>
-                    </div>
-                }
+                         <For each=move || SidebarIcon::init(cx)
+                           key=|vec| vec.href.to_string()
+                           view=move |cx, item: SidebarIcon| {
+                             view! {cx, <MobileItem item />}
+                         }/>
+                             </div>
+                         }
             }
             else {
                 view! {cx, <div></div>}
@@ -283,31 +278,30 @@ fn MobileFooter(cx: Scope) -> impl IntoView {
 fn MobileItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
     // let current_user = create_resource(cx, || (), fetcher)
     view! {cx,
-        <li href=item.href class=move ||
+        <A href=item.href class=move ||
             format!("group flex gap-x-3 text-sm
             leading-6 font-semibold w-full justify-center
             p-4 hover:bg-gray-100 {}", (item.active)(cx))
-            style="color: gray"
             on:click=move |_| if let Some(function) =
             &item.on_click {function(cx)}>
             <Icon style="gray" icon=item.icon
                 class="h-6 w-6"/>
-        </li>
+        </A>
     }
 }
 
 #[component]
 fn DesktopItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
     view! { cx,
-    <li on:click=move |_| if let Some(function)
+    <A on:click=move |_| if let Some(function)
              = &item.on_click {function(cx)} href=item.href
              class=move || format!("group flex gap-x-3
-             rounded-md p-4 text-sm leading-6 font-semibold
-             text-gray-500 hover:text-black hover:bg-gray-100 {}
-             ", (item.active)(cx))>
+                rounded-md p-4 text-sm leading-6 font-semibold
+                text-gray-500 hover:text-black hover:bg-gray-100
+                 {}", (item.active)(cx))>
     <Icon icon=item.icon class="h-6 w-6 shrink-0"
              style="color: red"/>
-    </li>
+    </A>
     }
 }
 
@@ -395,26 +389,15 @@ fn UserList(cx: Scope) -> impl IntoView {
 
 #[component]
 fn UserBox(cx: Scope) -> impl IntoView {
-    fn callback(cx: Scope, item: UserModel) -> impl Fn(MouseEvent) {
+    fn callback(cx: Scope, id: i32) -> impl Fn(MouseEvent) {
         move |_event: MouseEvent| {
             let _ = create_local_resource(
                 cx,
                 || (),
-                move |_| async move { conversation_action(cx, vec![item.id], false, None).await },
+                move |_| async move { conversation_action(cx, vec![id], false, None).await },
             );
-            spawn_local(async move {
-                let _ = leptos_router::use_navigate(cx)(
-                    &("/conversations/".to_string()
-                        + &associated_conversation(cx, item.id)
-                            .await
-                            .unwrap()
-                            .to_string()),
-                    Default::default(),
-                );
-            })
         }
     }
-
     let users_arr = create_resource(cx, || (), move |_| async move { get_users(cx).await });
     view! {cx,
         <Suspense fallback=loading_fallback(cx)>
@@ -425,25 +408,34 @@ fn UserBox(cx: Scope) -> impl IntoView {
                           each=move || items.clone()
                           key=|items| items.id
                           view=move |cx, item: UserModel| {
+                            let id = create_local_resource(cx, ||(), move |_| async move {associated_conversation(cx, item.id).await});
+                            let name = create_rw_signal(cx, format!("{} {}", item.first_name, item.last_name));
                             view! {
                               cx,
-                                <div class="w-full relative flex
-                                    items-center space-x-3 bg-white
-                                    p-3 hover:bg-neutral-100 rounded-lg
-                                    transition cursor-pointer"
-                                    on:click=callback(cx, item.clone())
-                                    >
-                                        <Avatar id=item.id/>
-                                        <div class="min-w-0 flex-1">
-                                            <div class="focus:outline-none">
-                                                <div class="flex justify-between items-center mb-1">
-                                                    <p class="text-sm font-medium text-gray-900">
-                                                        {item.first_name + " " + &item.last_name}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                </div>
+                                <Suspense fallback=||()>
+                                    {move || id.read(cx).map(|conversation_id|
+                                        view!{cx,
+                                         <A href=format!("/conversations/{}", conversation_id.unwrap())>
+                                             <div class="w-full relative flex
+                                                 items-center space-x-3 bg-white
+                                                 p-3 hover:bg-neutral-100 rounded-lg
+                                                 transition cursor-pointer"
+                                                 on:click=callback(cx, item.id)
+                                                 >
+                                                     <Avatar id=item.id/>
+                                                     <div class="min-w-0 flex-1">
+                                                         <div class="focus:outline-none">
+                                                             <div class="flex justify-between items-center mb-1">
+                                                                 <p class="text-sm font-medium text-gray-900">
+                                                                     {move || name.get()}
+                                                                 </p>
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                             </div>
+                                         </A>
+                                        })}
+                                </Suspense>
                                   }
                           }
                         />
@@ -549,10 +541,9 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
             .contains(&cloned_item.conversation_id.to_string())
     };
 
-    let user_id = move || use_context::<UserContext>(cx).unwrap().id;
     view! {cx,
-        <div on:click=move |_| use_navigate(cx)(&("/conversations/".to_string() + &cloned_item.conversation_id.to_string()), Default::default()).unwrap()
-            class=move || format!("w-full relative flex items-center space-x-3 hover:bg-neutral-100 rounded-lg transition cursor-pointer p-3 {}",
+        <A href=format!("/conversations/{}", &cloned_item.conversation_id.to_string())
+                class=move || format!("w-full relative flex items-center space-x-3 hover:bg-neutral-100 rounded-lg transition cursor-pointer p-3 {}",
                 if query() {"bg-neutral-100"} else {"bg-white"})>
             {
 
@@ -591,7 +582,7 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
                 </p>
                 </div>
             </div>
-        </div>
+        </A>
     }
 }
 
@@ -628,14 +619,13 @@ pub fn ConversationId(cx: Scope) -> impl IntoView {
                                         <EmptyState/>
                                     </>
                             }
-                    } else {
+                        } else {
                             view!{cx,
                                     <>
                                         <Header conversation=conversations.unwrap()/>
-                                        {move || messages.read(cx).map(|messages|
-                                            view!{cx,
-                                                <Body messages=messages.unwrap()/>
-                                        })}
+                                            {move || messages.read(cx).map(|messages|
+                                                view!{cx, <Body messages=messages.unwrap()/>
+                                            })}
                                         <MessageForm current_id/>
                                     </>
                             }
@@ -669,24 +659,21 @@ fn Header(cx: Scope, conversation: Vec<ConversationMeta>) -> impl IntoView {
         <div class="bg-white w-full flex border-b-[1px] sm:px-4
             py-3 px-4 lg:px-6 justify-between items-center shadow-sm">
             <div class="flex gap-3 items-center">
-                <link href="/conversations"
+                <A href="/conversations"
                     class="lg:hidden block text-sky-500
                     hover:text-sky-600 transition cursor-pointer">
                          <Icon icon=HiIcon::HiChevronLeftSolidLg style="font-size: 16px; stroke: currentColor" on:click=move |_| {
                                     use_context::<IsOpen>(cx).unwrap().status.set(false);
-                                    queue_microtask(move || {
-                                        use_navigate(cx)("/conversations", Default::default()).unwrap();
-                                    });
                                 }
                         />
-                </link>
+                </A>
                 {
-                conversation.first().is_some().then(|| {
-                    let conversation = conversation.first().unwrap();
-                    match conversation.is_group.eq(&1) {
-                        true => view!{cx, <><AvatarGroup user_ids=conversation.other_users.iter().map(|(_,_,id)| *id).collect()/></> },
-                        false => view!{cx, <><Avatar id=conversation.other_users.first().unwrap().2/></> }
-                }})
+                    conversation.first().is_some().then(|| {
+                        let conversation = conversation.first().unwrap();
+                        match conversation.is_group.eq(&1) {
+                            true => view!{cx, <><AvatarGroup user_ids=conversation.other_users.iter().map(|(_,_,id)| *id).collect()/></> },
+                            false => view!{cx, <><Avatar id=conversation.other_users.first().unwrap().2/></> }
+                    }})
                 }
                 <div class="flex flex-col">
                     <div>
@@ -1294,7 +1281,7 @@ fn UserInput(
 #[component]
 fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
     let disable_signal = create_rw_signal(cx, false);
-    let input_signal = create_rw_signal(cx, vec![(view! {cx, <><div/></>}, 0)]);
+    let input_signal = create_rw_signal(cx, vec![(view! {cx, <div/>}, 0)]);
     let name_ref = create_node_ref::<Input>(cx);
     let form_ref = create_node_ref::<html::Form>(cx);
     let action = create_server_action::<CreateGroupConversation>(cx);
@@ -1302,8 +1289,9 @@ fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
     let clear_input = move |_| {
         name_ref.get().unwrap().set_value("");
         input_ref.get().unwrap().set_value("");
-        input_signal.set(vec![(view! {cx, <><div/></>}, 0)])
+        input_signal.set(vec![(view! {cx, <div/>}, 0)])
     };
+    let err_result_signal = create_rw_signal(cx, String::new());
     view! {cx,
         <Modal context>
             <ActionForm action node_ref=form_ref>
@@ -1314,6 +1302,9 @@ fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
                          </h2>
                         <p class="mt-1 text-sm leading-6 text-gray-600">
                             "Create a chat with more than two people"
+                        </p>
+                        <p>
+                            {move || err_result_signal}
                         </p>
                         <div class="mt-10 flex flex-col gap-y-8">
                             <UserInput id="name" label="Group Name" input_type="text" required=true disabled=ButtonVal::RwSignal(disable_signal) placeholder=String::from("Group Name...") _ref=name_ref/>
@@ -1326,7 +1317,12 @@ fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
                  <Button on_click=clear_input button_type="button" disabled=ButtonVal::RwSignal(disable_signal) color="bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-600">
                     "Cancel"
                  </Button>
-                 <Button on_click=|_|() button_type="submit" disabled=ButtonVal::RwSignal(disable_signal) color="bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-600">
+                 <Button on_click=move |_| {
+                        match form_ref.get().unwrap().submit() {
+                            Ok(_) => context.set(false),
+                            Err(e) => err_result_signal.set(e.as_string().unwrap())
+                        }
+                    } button_type="submit" disabled=ButtonVal::RwSignal(disable_signal) color="bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-600">
                     "Create"
                  </Button>
             </div>
@@ -1341,7 +1337,7 @@ fn Select(
     disabled: RwSignal<bool>,
     label: &'static str,
     _ref: NodeRef<Input>,
-    input_signal: RwSignal<Vec<(Fragment, i32)>>,
+    input_signal: RwSignal<Vec<(HtmlElement<Div>, i32)>>,
 ) -> impl IntoView {
     let hidden_state = create_rw_signal(cx, true);
 
@@ -1363,11 +1359,17 @@ fn Select(
                 name="other_users"
                 _ref=_ref
                 on:click=move |_| hidden_state.update(|val| *val = !*val )/>
-                {move || input_signal.get().iter().map(|val| {
-                    val.0.clone()
-                }).collect_view(cx)}
+                     <For
+                       each=move || input_signal.get()
+                       key=|input| input.1
+                       view=move |_cx, item: (HtmlElement<Div>, i32)| {
+                         view! {
+                           _cx,
+                             {item.0}
+                        }
+                     }/>
               <ul class=move || format!("absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg {}", if hidden_state.get() {"hidden"} else {"block"})>
-                <Suspense fallback=loading_fallback(cx)>
+                <Suspense fallback=||()>
                      {move || users.read(cx).map(|options|
                          view!{cx,
                              <For
@@ -1379,13 +1381,12 @@ fn Select(
                                           (! input.value().contains(&(item.id.to_string()))).then(|| {
                                             view! {
                                               cx,
-                                                <>
                                                <li value=item.id _ref=li_ref class="text-sm z-[9999] px-4 py-2 cursor-pointer hover:bg-gray-100" on:click=move |_| {
-                                                    let input_ref = Rc::new(input.clone());
+                                                    let input_ref = input.clone();
                                                     let input = input.clone();
-                                                     hidden_state.set(true);
+                                                    hidden_state.set(true);
                                                     let link = li_ref.get().unwrap();
-                                                    let link_ref = Rc::new(link.clone());
+                                                    let link_ref = link.clone();
                                                     let value = move || {
                                                     match input_ref.value().chars().last() {
                                                             Some(char) => {
@@ -1404,7 +1405,6 @@ fn Select(
                                                     input_signal.update(|val| {
                                                     val.push((
                                                     view!{cx,
-                                                        <>
                                                             <div class="flex mt-2 gap-x-3 text-sm border-gray-300 rounded-md bg-sky-200 p-2 w-fit" id=item.id>
                                                                 {link.inner_text()}
                                                                 <Icon icon=IoIcon::IoClose class="h-3 w-3" on:click=move |_| {
@@ -1418,12 +1418,10 @@ fn Select(
                                                                     });
                                                                 }/>
                                                             </div>
-                                                        </>
                                                     },item.id)
                                                 )})}>
                                                     {item.first_name + " " + &item.last_name}
                                                </li>
-                                                </>
                                          }
                                          })
                                      }/>
@@ -1437,7 +1435,6 @@ fn Select(
 
 #[component]
 fn AvatarGroup(cx: Scope, user_ids: Vec<i32>) -> impl IntoView {
-    log!("{user_ids:?}");
     let mut user_ids = user_ids;
     user_ids.truncate(3);
     let user_ids = user_ids.into_iter().enumerate().collect::<Vec<_>>();

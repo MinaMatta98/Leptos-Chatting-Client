@@ -17,12 +17,29 @@ This repository demonstrates the use of the following technologies:
 * Tailwind CSS compilation
 
 
-## Coming Soon
-### Signup
-![Signup](./Demo/signup.png)
-### Login
-![Login](./Demo/login.png)
-### Login Confirmation
-![Confirmation](./Demo/confirmation.png)
-### Chatting
-![Conversations](./Demo/conversations.png)
+## Preview
+### Conversations
+![Converesations](./Demo/conversations.png)
+![Converesation-Info](./Demo/conversations-info.png)
+![Converesation-Deletion](./Demo/conversations-deletion.png)
+### Group Chatting
+![Creation](./Demo/group-chat-1.png)
+![Multi User Conversation](./Demo/group-chat-2.png)
+### Group Chatting
+![Graceful-Suspension](./Demo/Graceful-suspension.png)
+
+## Building
+To build this repository within a container, where cargo and mariadb are not installed, simply run the following command within the root directory of this project in an environment where docker is installed:
+
+```bash
+docker build -t zing .
+```
+
+Note that this building process involves compiling the release version of the project (heavily optimized) and **will** take upwards of 15-20 minutes to compile. With a ryzen 7950x3D (16 core, 32 thread CPU), this compiles in approximately 5-7 minutes.
+
+## Running
+To run this project after compilation, run the following command:
+
+```bash
+docker run -p 8000:8000 zing
+```
