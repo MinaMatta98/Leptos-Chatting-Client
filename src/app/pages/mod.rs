@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use base64::{engine::general_purpose, Engine as _};
@@ -13,7 +12,8 @@ use leptos::{
 };
 use leptos_icons::*;
 use leptos_router::*;
-use web_sys::{MouseEvent, ScrollToOptions, SubmitEvent};
+use wasm_bindgen::JsCast;
+use web_sys::{Element, MouseEvent, SubmitEvent};
 
 use crate::{
     app::IsOpen,
@@ -26,11 +26,13 @@ use crate::{
     },
 };
 
-use super::DrawerContext;
+use super::{DrawerContext, MessageDrawerContext};
+
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+
 use gloo_net::websocket::futures::WebSocket;
 
 lazy_static! {
@@ -57,7 +59,8 @@ pub struct UserImage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Message {
-    pub message: String,
+    pub message: Option<String>,
+    pub image: Option<String>,
     pub conversation_id: i32,
     pub user_id: i32,
     pub first_name: String,
@@ -184,14 +187,112 @@ fn loading_fallback(cx: Scope) -> Box<dyn Fn() -> View> {
     })
 }
 
-fn handle_websocket(
-    id: i32,
-) -> (
-    SplitSink<WebSocket, gloo_net::websocket::Message>,
-    SplitStream<WebSocket>,
-) {
-    let ws = WebSocket::open(&format!("ws://localhost:8000/ws/{}", id)).unwrap();
-    ws.split()
+struct HandleWebSocket;
+
+impl HandleWebSocket {
+    fn handle_websocket(
+        id: i32,
+    ) -> (
+        SplitSink<WebSocket, gloo_net::websocket::Message>,
+        SplitStream<WebSocket>,
+    ) {
+        let ws = WebSocket::open(&format!("ws://localhost:8000/ws/{}", id)).unwrap();
+        ws.split()
+    }
+
+    async fn handle_sink_stream(message: Message, id: i32) {
+        let (mut ws_write, _) = Self::handle_websocket(id);
+        ws_write
+            .send(gloo_net::websocket::Message::Text(
+                serde_json::to_string(&message).unwrap(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    async fn handle_split_stream(id: i32, messages: RwSignal<Vec<MergedMessages>>) {
+        let (_, mut ws_read) = Self::handle_websocket(id);
+        while let Some(value) = ws_read.next().await {
+            let result = match value {
+                Ok(gloo_net::websocket::Message::Text(text)) => Some(serde_json::from_str(&text)),
+                Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
+                    let text = String::from_utf8(bytes).unwrap();
+                    Some(serde_json::from_str(&text))
+                }
+                _ => None,
+            };
+
+            if let Some(Ok(value)) = result {
+                let value: Message = value;
+                messages.update(|messages| {
+                    messages.push(MergedMessages {
+                        first_name: value.first_name.clone(),
+                        last_name: value.last_name.clone(),
+                        created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
+                        message_sender_id: value.user_id,
+                        message_body: value.message.clone(),
+                        message_image: value.image,
+                        message_conversation_id: value.conversation_id,
+                        seen_status: vec![SeenMessageFacing {
+                            first_name: Some(value.first_name),
+                            last_name: Some(value.last_name),
+                            message_id: None,
+                            seen_id: Some(value.user_id),
+                        }],
+                        message_id: 0,
+                    })
+                });
+            }
+        }
+    }
+}
+
+struct UserInputHandler;
+
+impl UserInputHandler {
+    async fn handle_message(
+        cx: Scope,
+        image_ref: NodeRef<Input>,
+        input_ref: NodeRef<Input>,
+        id: i32,
+    ) {
+        let body = input_ref.get().unwrap().value();
+        let user_context = use_context::<UserContext>(cx).unwrap();
+
+        if let Some(files) = image_ref.get().unwrap().files() {
+            let list = gloo_file::FileList::from(files);
+            if let Some(file) = list.first() {
+                let file = Some(gloo_file::futures::read_as_bytes(file).await.unwrap());
+                if let Ok(path) = handle_message_input(cx, id, None, file.clone()).await {
+                    HandleWebSocket::handle_sink_stream(
+                        Message {
+                            message: None,
+                            image: path,
+                            conversation_id: id,
+                            first_name: user_context.first_name.get_untracked(),
+                            last_name: user_context.last_name.get_untracked(),
+                            user_id: user_context.id.get_untracked(),
+                        },
+                        id,
+                    )
+                    .await;
+                }
+            } else if (handle_message_input(cx, id, Some(body.clone()), None).await).is_ok() {
+                HandleWebSocket::handle_sink_stream(
+                    Message {
+                        message: Some(body),
+                        image: None,
+                        conversation_id: id,
+                        first_name: user_context.first_name.get_untracked(),
+                        last_name: user_context.last_name.get_untracked(),
+                        user_id: user_context.id.get_untracked(),
+                    },
+                    id,
+                )
+                .await
+            }
+        }
+    }
 }
 
 #[component]
@@ -497,7 +598,12 @@ pub fn Conversations(cx: Scope) -> impl IntoView {
 fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
     let conversations = create_local_resource(
         cx,
-        || (),
+        move || {
+            use_context::<MessageDrawerContext>(cx)
+                .unwrap()
+                .status
+                .get()
+        },
         move |_| async move { get_conversations(cx).await.unwrap() },
     );
 
@@ -528,10 +634,9 @@ fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
                                        each=move || val.clone()
                                        key=|val| val.conversation_id
                                        view=move |cx, item: MergedConversation| {
-                                        view! {
-                                                    cx,
+                                        view! {cx,
                                                      <ConversationBox item/>
-                                                  }}/>
+                                               }}/>
                                     </div>
                                 </aside>
                           }
@@ -552,14 +657,27 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
     let message_signal = create_rw_signal(cx, String::new());
     let recv = move || message_signal.get();
 
-    let (mut sink, mut stream) = handle_websocket(item.conversation_id);
+    let (mut sink, mut stream) = HandleWebSocket::handle_websocket(item.conversation_id);
     spawn_local(async move {
         while let Some(value) = stream.next().await {
             message_signal.set(
                 match value.unwrap_or_else(|_| gloo_net::websocket::Message::Text("".to_string())) {
                     gloo_net::websocket::Message::Text(text) => match text.as_str() {
                         "" => recv(),
-                        _ => serde_json::from_str::<Message>(&text).unwrap().message,
+                        _ => {
+                            if serde_json::from_str::<Message>(&text)
+                                .unwrap()
+                                .image
+                                .is_some()
+                            {
+                                String::from("Image Sent in Chat")
+                            } else {
+                                serde_json::from_str::<Message>(&text)
+                                    .unwrap()
+                                    .message
+                                    .unwrap()
+                            }
+                        }
                     },
                     gloo_net::websocket::Message::Bytes(_) => String::from("Image sent in chat"),
                 },
@@ -608,7 +726,7 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
 
                 match cloned_item.conversation.is_group {
                 true => view!{cx, <><AvatarGroup user_ids=cloned_item.conversation.user_ids/></> },
-                false => view!{cx, <><Avatar id=*cloned_item.conversation.user_ids.first().unwrap()/></> }
+                false => view!{cx, <><Avatar id=*cloned_item.conversation.user_ids.iter().find(|&&user| user != use_context::<UserContext>(cx).unwrap().id.get()).unwrap()/></> }
                 }
             }
             <div class="min-w-0 flex-1">
@@ -645,7 +763,6 @@ pub fn ConversationId(cx: Scope) -> impl IntoView {
         validate_conversation(cx, current_id).await
     });
 
-    let bottom_ref = create_node_ref(cx);
     let messages = create_local_resource(cx, current_id, move |current_id| async move {
         view_messages(cx, current_id).await
     });
@@ -677,11 +794,11 @@ pub fn ConversationId(cx: Scope) -> impl IntoView {
                                         <Header conversation=conversations.unwrap()/>
                                             {move || messages.read(cx).map(|messages| {
                                                 view!{cx,
-                                                    <Body messages=messages.unwrap() bottom_ref
+                                                    <Body messages=messages.unwrap()
                                                     />
                                                 }
                                             })}
-                                        <MessageForm current_id bottom_ref/>
+                                        <MessageForm/>
                                     </>
                             }
                     }
@@ -755,107 +872,57 @@ fn Header(cx: Scope, conversation: Vec<ConversationMeta>) -> impl IntoView {
 }
 
 #[component]
-fn Body(cx: Scope, messages: Vec<MergedMessages>, bottom_ref: NodeRef<Div>) -> impl IntoView {
-    let last: i32;
+fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
     let messages = create_rw_signal(cx, messages);
 
-    let (_ws_write, mut ws_read) = handle_websocket(get_current_id(cx)());
-
     spawn_local(async move {
-        while let Some(value) = ws_read.next().await {
-            let result = match value {
-                Ok(gloo_net::websocket::Message::Text(text)) => Some(serde_json::from_str(&text)),
-                Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
-                    let text = String::from_utf8(bytes).unwrap();
-                    Some(serde_json::from_str(&text))
-                }
-                _ => None,
-            };
-
-            if let Some(Ok(value)) = result {
-                let value: Message = value;
-                messages.update(|messages| {
-                    messages.push(MergedMessages {
-                        first_name: value.first_name.clone(),
-                        last_name: value.last_name.clone(),
-                        created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
-                        message_sender_id: value.user_id,
-                        message_body: Some(value.message.clone()),
-                        message_image: None,
-                        message_conversation_id: value.conversation_id,
-                        seen_status: vec![SeenMessageFacing {
-                            first_name: Some(value.first_name),
-                            last_name: Some(value.last_name),
-                            message_id: None,
-                            seen_id: Some(value.user_id),
-                        }],
-                        message_id: 0,
-                    })
-                });
-            }
-        }
+        HandleWebSocket::handle_split_stream(get_current_id(cx)(), messages).await;
     });
 
-    if let Some(message) = messages.get().last() {
-        last = message.message_id;
-    } else {
-        last = 0;
-    }
+    let last = match messages.get().last() {
+        Some(message) => message.message_id,
+        _ => 0,
+    };
 
     view! {cx,
-        <div class="flex-1 overflow-y-auto ">
-                { move ||
-                    messages.get().iter().map(|item|
-                        view! {cx,
-                            <MessageBox message=item.clone() is_last=(last == item.message_id)/>
-                        }
-                    ).collect_view(cx)
-                }
-         <div node_ref=bottom_ref id="bottom_ref" class="pt-24"/>
+            <div class="flex-1 overflow-y-auto ">
+                    { move ||
+                        messages.get().iter().map(|item|
+                            view! {cx,
+                                <MessageBox message=item.clone() is_last=(last == item.message_id)/>
+                            }
+                        ).collect_view(cx)
+                    }
+             <div id="bottom_ref" class="pt-24"/>
         </div>
     }
 }
 
 #[component]
-fn MessageForm<F>(cx: Scope, current_id: F, bottom_ref: NodeRef<Div>) -> impl IntoView
-where
-    F: Fn() -> i32 + 'static,
-{
+fn MessageForm(cx: Scope) -> impl IntoView {
     let _input_ref = create_node_ref::<html::Input>(cx);
     let image_ref = create_node_ref::<html::Input>(cx);
-    let user_context = use_context::<UserContext>(cx).unwrap();
 
-    let id = current_id();
+    let scroll = move || {
+        if let Some(element) = web_sys::window()
+            .and_then(|win| win.document())
+            .and_then(|doc| doc.get_element_by_id("bottom_ref"))
+            .and_then(|elem| elem.dyn_into::<Element>().ok())
+        {
+            element.scroll_into_view();
+        }
+    };
+
     let on_submit_callback = move |event: SubmitEvent| {
         event.prevent_default();
         event.stop_propagation();
-        let body = _input_ref.get().unwrap().value();
 
         spawn_local(async move {
-            if let Some(files) = image_ref.get_untracked().unwrap().files() {
-                let list = gloo_file::FileList::from(files);
-                if let Some(file) = list.first() {
-                    let file = Some(gloo_file::futures::read_as_bytes(file).await.unwrap());
-                    handle_message_input(cx, id, None, file).await;
-                } else if (handle_message_input(cx, id, Some(body.clone()), None).await).is_ok() {
-                    let (mut ws_write, _) = handle_websocket(id);
-                    ws_write
-                        .send(gloo_net::websocket::Message::Text(
-                            serde_json::to_string(&Message {
-                                message: body,
-                                conversation_id: id,
-                                first_name: user_context.first_name.get_untracked(),
-                                last_name: user_context.last_name.get_untracked(),
-                                user_id: user_context.id.get_untracked(),
-                            })
-                            .unwrap(),
-                        ))
-                        .await
-                        .unwrap();
-                    _input_ref.get_untracked().unwrap().set_value("");
-                }
-            }
-        })
+            UserInputHandler::handle_message(cx, image_ref, _input_ref, get_current_id(cx)()).await;
+            image_ref.get_untracked().unwrap().set_value("");
+            _input_ref.get_untracked().unwrap().set_value("");
+            scroll()
+        });
     };
 
     view! {cx,
@@ -872,11 +939,13 @@ where
                  <Icon icon=HiIcon::HiPaperAirplaneOutlineLg width="18px" class="text-white" style="stroke: white; fill: white"/>
              </button>
          </form>
+            {scroll()}
     }
 }
 
 #[component]
 fn MessageInput(cx: Scope, _input_ref: NodeRef<html::Input>) -> impl IntoView {
+
     view! {cx,
         <div class="relative w-full">
             <input required=false placeholder="Write a message..." _ref=_input_ref
@@ -905,11 +974,15 @@ fn MessageBox(cx: Scope, message: MergedMessages, is_last: bool) -> impl IntoVie
         move || message_image.clone(),
         move |message_image| async move {
             if let Some(image) = message_image {
-                match IMAGEVEC.read().unwrap().iter().any(|image_vec| image_vec.path == image.clone()) {
+                match IMAGEVEC
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .any(|image_vec| image_vec.path == image.clone())
+                {
                     true => ImageEnum::Some(Ok(ImageAvailability::Found)),
-                    false => ImageEnum::Some(find_image(cx, image).await)
+                    false => ImageEnum::Some(find_image(cx, image).await),
                 }
-                
             } else {
                 ImageEnum::None
             }
@@ -920,7 +993,7 @@ fn MessageBox(cx: Scope, message: MergedMessages, is_last: bool) -> impl IntoVie
 
     let message_class = format!(
         "text-sm w-fit overflow-hidden {} {}",
-        if is_own() {
+        if is_own() && message.message_image.is_none() {
             "bg-sky-500 text-white"
         } else {
             "bg-gray-100"
@@ -1188,7 +1261,7 @@ where
 fn Modal(cx: Scope, children: Children, context: RwSignal<bool>) -> impl IntoView {
     let on_close = move |_| context.set(false);
     view! {cx,
-    <div class=move || format!("absolute h-screen w-screen inset-0 z-50 bg-gray-500 bg-opacity-50 {}", if context.get() {"block"} else {"hidden"})>
+    <div class=move || format!("absolute h-screen w-screen inset-0 z-50 bg-gray-500 bg-opacity-50 {}", if context.get() {"block"} else {"hidden"}) on:click=on_close>
      <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div class="bg-gray-500 bg-opacity-50"></div>
       <div class="absolute bottom-1/2 bg-white rounded-lg shadow-xl p-4 sm:p-6 mb-4 w-1/2 translate-x-1/2 translate-y-1/2">
@@ -1247,6 +1320,10 @@ fn ConfirmModal(cx: Scope) -> impl IntoView {
                 .await
                 .unwrap();
             drawer_context().set(false);
+            use_context::<MessageDrawerContext>(cx)
+                .unwrap()
+                .status
+                .update(|val| *val = !*val);
             queue_microtask(move || {
                 let _ = use_navigate(cx)("/conversations", Default::default());
             })
@@ -1632,8 +1709,7 @@ fn AvatarGroup(cx: Scope, user_ids: Vec<i32>) -> impl IntoView {
 }
 
 #[component]
-fn ImageModal(cx: Scope, context: RwSignal<bool>, src: String) -> impl IntoView
-{
+fn ImageModal(cx: Scope, context: RwSignal<bool>, src: String) -> impl IntoView {
     view! {cx,
         <Modal context>
             <div class="max-w-[80%] max-h-[80%]">
