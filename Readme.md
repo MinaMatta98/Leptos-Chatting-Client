@@ -26,7 +26,7 @@ This repository demonstrates the use of the following technologies:
 ### Group Chatting
 ![Creation](./Demo/group-chat-1.png)
 ![Multi User Conversation](./Demo/group-chat-2.png)
-### Group Chatting
+### Graceful-Suspension
 ![Graceful-Suspension](./Demo/Graceful-suspension.png)
 
 ## Building
