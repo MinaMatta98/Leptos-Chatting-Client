@@ -7,9 +7,9 @@ use leptos_icons::*;
 use crate::{app::{NameSchema, SignupSchema,
     EmailSchema, PhoneSchema, EmailContext,
     FormValidation, validation::ValidationSchema,
-    PasswordSchema, VerifyPassword, pages::UserContext},
+    PasswordSchema, VerifyPassword},
     server_function::{ConfirmSubscription,
-    self, Login, LoginStatus, sign_up}};
+    self, Login, sign_up}};
 
 use super::{VerificationValidation, SignupContext, AppState};
 

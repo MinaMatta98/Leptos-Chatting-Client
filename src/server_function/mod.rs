@@ -955,7 +955,6 @@ pub async fn conversation_action(
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>,
               user: Option<Identity>| {
             let other_users = other_users.clone();
-            println!("{:?}", other_users);
             let name = name.clone();
             async move {
                 let user = match UserLogin::evaluate_user(user) {
@@ -1229,7 +1228,6 @@ pub async fn associated_conversation(cx: Scope, other_user: i32) -> Result<i32, 
                     })
                     .collect::<Vec<_>>();
 
-                println!("{:?}", user_conversation);
                 Ok(conversations
                     .iter()
                     .find_map(|conversations| {
@@ -1257,9 +1255,10 @@ pub async fn handle_message_input(
     conversation_id: i32,
     body: Option<String>,
     image: Option<Vec<u8>>,
-) -> Result<(), ServerFnError> {
+) -> Result<Option<String>, ServerFnError> {
     use crate::entities::message;
     use actix_identity::Identity;
+    use image::io::Reader as ImageReader;
 
     if body.is_none() && image.is_none() {
         return Err(server_fn::ServerFnError::MissingArg(String::from(
@@ -1293,8 +1292,25 @@ pub async fn handle_message_input(
                         std::fs::create_dir_all("./upload").unwrap();
                     };
 
-                    std::fs::write("./upload/".to_string() + &current_time + ".png", image_vec)
-                        .ok();
+                    let kind = infer::get(&image_vec).expect("file type is known");
+                    let image = if kind.mime_type().ne("image/png") {
+                        let image = ImageReader::new(std::io::Cursor::new(image_vec))
+                            .with_guessed_format()
+                            .unwrap()
+                            .decode()
+                            .unwrap();
+
+                        turbojpeg::compress_image(
+                            &image.into_rgba8(),
+                            50,
+                            turbojpeg::Subsamp::Sub2x2,
+                        )
+                        .unwrap()
+                        .to_vec()
+                    } else {
+                        image_vec
+                    };
+                    std::fs::write("./upload/".to_string() + &current_time + ".png", image).ok();
                     image_location = Some("/upload/".to_string() + &current_time + ".png")
                 };
 
@@ -1303,13 +1319,14 @@ pub async fn handle_message_input(
                     message::server::ActiveModel {
                         message_body: sea_orm::ActiveValue::Set(body),
                         message_sender_id: sea_orm::ActiveValue::Set(user.id),
-                        message_image: sea_orm::ActiveValue::Set(image_location),
+                        message_image: sea_orm::ActiveValue::Set(image_location.clone()),
                         message_conversation_id: sea_orm::ActiveValue::Set(conversation_id),
                         ..Default::default()
                     },
                 )
                 .await;
-                Ok(())
+
+                Ok(image_location)
             }
         },
     )
@@ -1415,6 +1432,7 @@ pub async fn upload_user_info(
     last_name: Option<String>,
 ) -> Result<(), ServerFnError> {
     use actix_identity::Identity;
+    use image::io::Reader as ImageReader;
     use validator::Validate;
     leptos_actix::extract(
         cx,
@@ -1479,7 +1497,18 @@ pub async fn upload_user_info(
                     };
 
                     let image_path = "images/".to_string() + &current_time + ".png";
-                    std::fs::write(&image_path, image).unwrap();
+                    let image = ImageReader::new(std::io::Cursor::new(image))
+                        .with_guessed_format()
+                        .unwrap()
+                        .decode()
+                        .unwrap();
+                    let compressed_image = turbojpeg::compress_image(
+                        &image.into_rgba8(),
+                        50,
+                        turbojpeg::Subsamp::Sub2x2,
+                    )
+                    .unwrap();
+                    std::fs::write(&image_path, compressed_image).unwrap();
 
                     AppendDatabase::modify(
                         user,
@@ -1534,9 +1563,7 @@ pub async fn get_image(cx: Scope, path: String) -> Result<Option<Vec<u8>>, Serve
     use std::io::Read;
     let mut path = path;
     path.remove(0);
-    let path = std::env::current_dir()
-        .unwrap()
-        .join(path);
+    let path = std::env::current_dir().unwrap().join(path);
 
     let mut buffer = Vec::new();
     if let Ok(mut file) = std::fs::File::open(path) {

@@ -1,12 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
-};
-
 use fancy_regex::Regex;
-use futures_util::stream::{SplitSink, SplitStream};
-use gloo_net::websocket::{futures::WebSocket, Message};
 use leptos::{
     html::{Div, Input},
     *,
@@ -35,6 +27,11 @@ pub struct EmailContext {
 
 #[derive(Debug, Clone)]
 pub struct DrawerContext {
+    pub status: RwSignal<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MessageDrawerContext {
     pub status: RwSignal<bool>,
 }
 
@@ -174,6 +171,13 @@ pub fn App(cx: Scope) -> impl IntoView {
         cx,
         DrawerContext {
             status: drawer_context,
+        },
+    );
+
+    provide_context(
+        cx,
+        MessageDrawerContext {
+            status: create_rw_signal(cx, false),
         },
     );
 
