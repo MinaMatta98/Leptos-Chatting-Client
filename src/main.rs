@@ -1,10 +1,14 @@
 #![feature(let_chains)]
+#![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
+use actix::Addr;
+use actix::*;
+use actix_web::web::{self, BytesMut};
 use actix_web::{
     cookie::Key, dev, get, http::StatusCode, App, Error, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
-use futures_util::future;
+use actix_web_actors::ws;
 pub use sea_orm::{Database, DbErr, *};
 pub mod app;
 pub mod database;
@@ -12,26 +16,9 @@ pub mod emailing;
 pub mod entities;
 pub mod migrator;
 pub mod server_function;
+pub mod web_socket;
 use app::*;
 use database::{database_run, DbConnection};
-
-async fn identity_middleware(
-    req: HttpRequest,
-    id: actix_identity::Identity,
-) -> Result<dev::ServiceResponse, Error> {
-    if id.id().is_err() {
-        // Redirect to a login page or any other desired endpoint
-        return Ok(actix_web::dev::ServiceResponse::new(
-            req,
-            HttpResponse::Ok()
-                .insert_header((actix_web::http::header::LOCATION, "/login"))
-                .finish(),
-        ));
-    }
-    // Identity exists, continue with the request handling
-    let fut = actix_web::dev::ServiceResponse::new(req, HttpResponse::Ok().finish());
-    Ok(future::ready(fut).await)
-}
 
 async fn clear_temp_db() {
     use entities::prelude::*;
@@ -59,7 +46,7 @@ async fn clear_temp_db() {
     }
 }
 
-fn render_images(folder: &str ,path: actix_web::web::Path<String>) -> Vec<u8> {
+fn render_images(folder: &str, path: actix_web::web::Path<String>) -> Vec<u8> {
     use std::io::Read;
 
     let path = std::env::current_dir()
@@ -73,22 +60,36 @@ fn render_images(folder: &str ,path: actix_web::web::Path<String>) -> Vec<u8> {
 }
 
 #[get("/upload/{image_path}")]
-async fn image_path(
-    path: actix_web::web::Path<String>,
-    req: HttpRequest,
-) -> HttpResponse {
-    let buffer = render_images("upload",path);
+async fn image_path(path: actix_web::web::Path<String>, req: HttpRequest) -> HttpResponse {
+    let buffer = render_images("upload", path);
     HttpResponse::Ok().body(buffer).respond_to(&req)
 }
 
-
 #[get("/images/{image_path}")]
-async fn upload_path(
-    path: actix_web::web::Path<String>,
-    req: HttpRequest,
-) -> HttpResponse {
-    let buffer = render_images("images",path);
+async fn upload_path(path: actix_web::web::Path<String>, req: HttpRequest) -> HttpResponse {
+    let buffer = render_images("images", path);
     HttpResponse::Ok().body(buffer).respond_to(&req)
+}
+
+// Entry point for our websocket route
+#[get("/ws/{id}")]
+async fn chat_route(
+    req: HttpRequest,
+    stream: web::Payload,
+    path: web::Path<usize>,
+    srv: web::Data<Addr<web_socket::server::ChatServer>>,
+) -> Result<HttpResponse, Error> {
+    ws::start(
+        web_socket::session::WsChatSession {
+            id: 0,
+            hb: std::time::Instant::now(),
+            room: *path,
+            name: None,
+            addr: srv.get_ref().clone(),
+        },
+        &req,
+        stream,
+    )
 }
 
 #[cfg(feature = "ssr")]
@@ -101,10 +102,10 @@ async fn main() -> std::io::Result<()> {
     use actix_files::Files;
     use actix_web::middleware::{Compress, Logger, NormalizePath};
     use server_function::{
-        AssociatedConversation, ConfirmSubscription, ConversationAction, DeleteConversation,
-        FindImage, GetConversations, GetUser, GetUsers, HandleMessageInput, HandleSeen, Login,
-        LoginStatus, Logout, Redirect, SignUp, UploadImage, Validate, ValidateConversation,
-        VerifyEmail, ViewMessages, GetImages, CreateGroupConversation
+        AssociatedConversation, ConfirmSubscription, ConversationAction, CreateGroupConversation,
+        DeleteConversation, FindImage, GetConversations, GetIcon, GetUser, GetUsers,
+        HandleMessageInput, HandleSeen, Login, LoginStatus, Logout, Redirect, SignUp, UploadImage,
+        Validate, ValidateConversation, VerifyEmail, ViewMessages, GetImage
     };
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;
@@ -135,7 +136,8 @@ async fn main() -> std::io::Result<()> {
     FindImage::register().unwrap();
     DeleteConversation::register().unwrap();
     UploadImage::register().unwrap();
-    GetImages::register().unwrap();
+    GetIcon::register().unwrap();
+    GetImage::register().unwrap();
     CreateGroupConversation::register().unwrap();
 
     tokio::task::spawn_local(clear_temp_db());
@@ -155,7 +157,8 @@ async fn main() -> std::io::Result<()> {
     let redis_address = "redis://127.0.0.1:6379";
     let secret_key = Key::generate();
     let redis_store = RedisSessionStore::new(redis_address).await.unwrap();
-
+    let app_state = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = web_socket::server::ChatServer::new(app_state.clone()).start();
     HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
         let site_root = &leptos_options.site_root;
@@ -164,11 +167,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(db_conn.clone())
             .app_data(actix_web::web::PayloadConfig::new(10_485_760))
+            .app_data(web::Data::from(app_state.clone()))
+            .app_data(web::Data::new(server.clone()))
             .wrap(IdentityMiddleware::default())
             .wrap(SessionMiddleware::new(
                 redis_store.clone(),
                 secret_key.clone(),
             ))
+            .service(chat_route)
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
             .leptos_routes(leptos_options.to_owned(), routes, |cx| view! { cx, <App/> })
             .wrap(Logger::new("%r %U").log_target("actix"))

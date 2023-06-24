@@ -1,5 +1,7 @@
 #![feature(let_chains)]
 #![feature(async_closure)]
+#![feature(stmt_expr_attributes)]
+
 use cfg_if::cfg_if;
 mod app;
 pub mod server_function;

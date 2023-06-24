@@ -32,6 +32,8 @@ pub struct ConversationMeta {
 pub struct UserLogin {
     pub id: i32,
     pub email: String,
+    pub first_name: String,
+    pub last_name: String,
 }
 
 #[cfg(feature = "ssr")]
@@ -725,6 +727,8 @@ pub async fn login(
                                 serde_json::to_string_pretty(&UserLogin {
                                     id: user.id,
                                     email: user.email,
+                                    first_name: user.first_name,
+                                    last_name: user.last_name,
                                 })
                                 .unwrap(),
                             )
@@ -1498,8 +1502,8 @@ pub async fn upload_user_info(
     .unwrap()
 }
 
-#[server(GetImages, "/api", "Url")]
-pub async fn get_image(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnError> {
+#[server(GetIcon, "/api", "Url")]
+pub async fn get_icon(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnError> {
     use std::io::Read;
     leptos_actix::extract(
         cx,
@@ -1523,6 +1527,24 @@ pub async fn get_image(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnEr
         },
     )
     .await
+}
+
+#[server(GetImage, "/api", "Url")]
+pub async fn get_image(cx: Scope, path: String) -> Result<Option<Vec<u8>>, ServerFnError> {
+    use std::io::Read;
+    let mut path = path;
+    path.remove(0);
+    let path = std::env::current_dir()
+        .unwrap()
+        .join(path);
+
+    let mut buffer = Vec::new();
+    if let Ok(mut file) = std::fs::File::open(path) {
+        file.read_to_end(&mut buffer).unwrap();
+        Ok(Some(buffer))
+    } else {
+        Ok(None)
+    }
 }
 
 #[server(CreateGroupConversation, "/api", "Url")]

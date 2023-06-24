@@ -1,4 +1,12 @@
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
+
 use fancy_regex::Regex;
+use futures_util::stream::{SplitSink, SplitStream};
+use gloo_net::websocket::{futures::WebSocket, Message};
 use leptos::{
     html::{Div, Input},
     *,
@@ -10,7 +18,7 @@ use validator::{Validate, ValidationError};
 use web_sys::SubmitEvent;
 mod callback;
 mod form_items;
-mod pages;
+pub mod pages;
 mod validation;
 
 use crate::app::{
@@ -162,7 +170,13 @@ pub fn App(cx: Scope) -> impl IntoView {
     let is_open = create_rw_signal(cx, false);
     let drawer_context = create_rw_signal(cx, false);
 
-    provide_context(cx, DrawerContext { status: drawer_context });
+    provide_context(
+        cx,
+        DrawerContext {
+            status: drawer_context,
+        },
+    );
+
     provide_context(cx, IsOpen { status: is_open });
     provide_context(
         cx,
@@ -180,14 +194,13 @@ pub fn App(cx: Scope) -> impl IntoView {
         },
     );
 
-    let user_id = create_rw_signal(cx, 0);
-    let user_email = create_rw_signal(cx, String::from(""));
-
     provide_context(
         cx,
         UserContext {
-            id: user_id,
-            email: user_email,
+            id: create_rw_signal(cx, 0),
+            email: create_rw_signal(cx, String::from("")),
+            first_name: create_rw_signal(cx, String::from("")),
+            last_name: create_rw_signal(cx, String::from("")),
         },
     );
 
@@ -209,13 +222,13 @@ pub fn App(cx: Scope) -> impl IntoView {
                     <Route path="/login" view=|cx| view! { cx, <HomePage toggle=AppState::Login/> } ssr = SsrMode::Async/>
                     <Route path="/validate" view=|cx| view! { cx, <HomePage toggle=AppState::Validate/> } ssr = SsrMode::Async/>
                     <Route path="/user" view=|cx| view! { cx, <Users /> } ssr = SsrMode::Async/>
-                    <Route path="/conversations" view=|cx| view! { cx, <Conversations/> } ssr = SsrMode::Async>
+                    <Route path="/conversations" view=|cx| view! { cx, <Conversations/>  } ssr = SsrMode::Async>
                         <Route path=":id" view=|cx| view! { cx, <ConversationId/> } ssr = SsrMode::Async/>
                         <Route path="/" view=|cx| view! { cx,
                                                      <div>
                                                         <div class=move || format!("lg:pl-80 h-screen
                                                              lg:block {}", if use_context::<IsOpen>(cx)
-                                                         .unwrap().status.get() {"block"} else {"hidden"})>
+                                                                .unwrap().status.get() {"block"} else {"hidden"})>
                                                             <EmptyState />
                                                         </div>
                                                      </div>
