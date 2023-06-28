@@ -70,7 +70,6 @@ pub async fn database_run() -> Result<(), DbErr> {
     };
 
     let db = Database::connect(database_url.clone()).await?;
-
     let db = &match db.get_database_backend() {
         DbBackend::MySql => {
             db.execute(Statement::from_string(

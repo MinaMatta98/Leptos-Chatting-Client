@@ -9,7 +9,7 @@ use crate::{app::{NameSchema, SignupSchema,
     FormValidation, validation::ValidationSchema,
     PasswordSchema, VerifyPassword},
     server_function::{ConfirmSubscription,
-    self, Login, sign_up}};
+    self, Login, sign_up, UserLogin}};
 
 use super::{VerificationValidation, SignupContext, AppState};
 
@@ -54,7 +54,7 @@ impl Callback {
             },
         };
 
-let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sign_up_schema| {
+let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_schema| {
     async move {
         sign_up(cx, sign_up_schema).await
     }
@@ -241,7 +241,7 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
 
         match element.name().as_str() {
             "firstName" => {
-                let entry = ValidationSchema::NameSchema(NameSchema { entry: input });
+                let entry = ValidationSchema::Name(NameSchema { entry: input });
                 validate(
                     cx,
                     entry,
@@ -252,7 +252,7 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                 );
             }
             "lastName" => {
-                let entry = ValidationSchema::NameSchema(NameSchema { entry: input });
+                let entry = ValidationSchema::Name(NameSchema { entry: input });
                 validate(
                     cx,
                     entry,
@@ -264,7 +264,7 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
             }
             "email" => {
                 let email_schema = EmailSchema { entry: input };
-                let entry = ValidationSchema::EmailSchema(email_schema.clone());
+                let entry = ValidationSchema::Email(email_schema.clone());
 
                 spawn_local(async move {
                     match validate(
@@ -300,7 +300,7 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                 });
             }
             "password" => {
-                let entry = ValidationSchema::PasswordSchema(PasswordSchema { entry: input });
+                let entry = ValidationSchema::Password(PasswordSchema { entry: input });
                 validate(
                     cx,
                     entry,
@@ -311,7 +311,7 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                 );
             }
             "phoneNumber" => {
-                let entry = ValidationSchema::PhoneSchema(PhoneSchema {
+                let entry = ValidationSchema::Phone(PhoneSchema {
                     entry: input.clone(),
                 });
                 let phone_schema = PhoneSchema { entry: input };
@@ -371,14 +371,17 @@ let signup = create_local_resource(cx, move || sign_up_schema.clone(), move |sig
                             view!{cx,
                                 {match val {
                                     Ok(val) => match val {
-                                            VerifyPassword::Success => {
+                                            VerifyPassword::Success(_) => {
                                             queue_microtask(move || use_navigate(cx)("/user", Default::default()).unwrap());
-                                                view!{cx, <p class="text-center">"Successful Login"</p>}
+                                                view!{cx, 
+                                                    <>
+                                                        <p class="text-center">"Successful Login"</p>
+                                                    </>}
                                             },
-                                            VerifyPassword::IncorrectCredentials => view!{cx, <p class="text-center">"Incorrect Credentials"</p>},
-                                            VerifyPassword::ServerError => view!{cx, <p class="text-center">"Server Error. Please Try again later."</p>}
+                                            VerifyPassword::IncorrectCredentials => view!{cx, <><p class="text-center">"Incorrect Credentials"</p></>},
+                                            VerifyPassword::ServerError => view!{cx, <><p class="text-center">"Server Error. Please Try again later."</p></>}
                                         },
-                                    Err(_) => view!{cx, <p class="text-center">"Server Error. Please Try again later."</p>}
+                                    Err(_) => view!{cx, <><p class="text-center">"Server Error. Please Try again later."</p></>}
                                     }
                                 }
                             }})}
