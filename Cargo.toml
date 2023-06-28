@@ -15,18 +15,18 @@ actix-session = { version = "0.7.2", features = ["redis", "redis-rs-session"], o
 actix = { version = "0.13.0", optional = true }
 console_error_panic_hook = "0.1"
 cfg-if = "1"
-leptos = { version = "0.3.1", default-features = false, features = [
+leptos = { version = "0.3.0", default-features = false, features = [
   "serde",
 ] }
 leptos_meta = { version = "0.3.1", default-features = false }
 leptos_actix = { version = "0.3.1", optional = true }
 leptos_router = { version = "0.3.1", default-features = false }
-leptos-use = { version = "0.3.3", default-features = false }
+# leptos-use = { version = "0.3.3", default-features = false, features = ["storage"] }
 wasm-bindgen = "0.2.87"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 getrandom = { version = "0.2.9", features = ["js"] }
-serde_urlencoded = "0.7.1"
+# serde_urlencoded = "0.7.1"
 fancy-regex = { version = "0.11.0" }
 validator = { version = "0.16.0", features = ["derive", "phone"] }
 lazy_static = "1.4.0"
@@ -53,15 +53,16 @@ infer = "0.14.0"
 actix-web-actors = { version = "4.2.0", optional = true }
 image = { version = "0.24.6", features = ["rgb"], optional = true }
 turbojpeg = { version = "0.5.2", features = ["image"], optional = true }
+parking_lot = { version = "0.12.1", features = ["deadlock_detection", "hardware-lock-elision", "nightly", "arc_lock"] }
 
 [build-dependencies]
 pkg-config = "0.3.26"
 
-[profile.wasm-release]
-inherits = "release"
-opt-level = 'z'
-lto = true
-codegen-units = 1
+# [profile.wasm-release]
+# inherits = "release"
+# opt-level = 'z'
+# lto = true
+# codegen-units = 1
 
 [features]
 default = ["ssr"]
@@ -86,7 +87,7 @@ ssr = [
 ]
 
 [package.metadata.leptos]
-lib-profile-release = "wasm-release"
+# lib-profile-release = "wasm-release"
 # project name
 name = "zing"
 # The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
@@ -113,7 +114,7 @@ browserquery = "defaults"
 # Set by cargo-leptos watch when building with that tool. Controls whether autoreload JS will be included in the head
 watch = true
 # The environment Leptos will run in, usually either "DEV" or "PROD"
-env = "DEV"
+env = "PROD"
 # The features to use when compiling the bin target
 #
 # Optional. Can be over-ridden with the command line parameter --bin-features

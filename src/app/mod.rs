@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use fancy_regex::Regex;
 use leptos::{
     html::{Div, Input},
@@ -13,11 +15,16 @@ mod form_items;
 pub mod pages;
 mod validation;
 
-use crate::app::{
-    callback::{Callback, SignupSetters},
-    form_items::{Banner, InputProps, InputValidation, ValidationGetter},
-    pages::{ConversationId, Conversations, EmptyState, UserContext, Users},
+use crate::{
+    app::{
+        callback::{Callback, SignupSetters},
+        form_items::{Banner, InputProps, InputValidation, ValidationGetter},
+        pages::{ConversationId, Conversations, EmptyState, Users},
+    },
+    server_function::UserLogin,
 };
+
+use self::pages::components::avatar::UserIcon;
 
 #[derive(Debug, Clone)]
 pub struct EmailContext {
@@ -36,6 +43,22 @@ pub struct MessageDrawerContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct SideBarContext {
+    pub status: RwSignal<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SeenContext {
+    pub status: RwSignal<Vec<SeenContextInner>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SeenContextInner {
+    pub conversation_id: i32,
+    pub last_message_id: i32,
+}
+
+#[derive(Debug, Clone)]
 pub struct IsOpen {
     pub status: RwSignal<bool>,
 }
@@ -44,6 +67,11 @@ pub struct IsOpen {
 pub struct SignupContext {
     status: ReadSignal<bool>,
     status_setter: WriteSignal<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IconVec {
+    icons: RwSignal<HashMap<i32, UserIcon>>
 }
 
 #[derive(Serialize, Deserialize, Validate, Clone, Debug, PartialEq)]
@@ -144,9 +172,9 @@ pub enum VerificationValidation {
     ServerError,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum VerifyPassword {
-    Success,
+    Success(UserLogin),
     IncorrectCredentials,
     ServerError,
 }
@@ -162,26 +190,10 @@ pub enum AppState {
 pub fn App(cx: Scope) -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context(cx);
+
     let (email_context, email_context_setter) = create_signal(cx, String::from(""));
     let (signup_context, signup_context_setter) = create_signal(cx, false);
-    let is_open = create_rw_signal(cx, false);
-    let drawer_context = create_rw_signal(cx, false);
 
-    provide_context(
-        cx,
-        DrawerContext {
-            status: drawer_context,
-        },
-    );
-
-    provide_context(
-        cx,
-        MessageDrawerContext {
-            status: create_rw_signal(cx, false),
-        },
-    );
-
-    provide_context(cx, IsOpen { status: is_open });
     provide_context(
         cx,
         EmailContext {
@@ -195,16 +207,6 @@ pub fn App(cx: Scope) -> impl IntoView {
         SignupContext {
             status: signup_context,
             status_setter: signup_context_setter,
-        },
-    );
-
-    provide_context(
-        cx,
-        UserContext {
-            id: create_rw_signal(cx, 0),
-            email: create_rw_signal(cx, String::from("")),
-            first_name: create_rw_signal(cx, String::from("")),
-            last_name: create_rw_signal(cx, String::from("")),
         },
     );
 
@@ -281,7 +283,7 @@ fn FormItem(
     field: &'static str,
     input_type: &'static str,
     name: &'static str,
-    reference: NodeRef<Input>,
+    _reference: NodeRef<Input>,
     validator: WriteSignal<leptos::HtmlElement<Div>>,
     toggle: AppState,
 ) -> impl IntoView {
@@ -294,7 +296,7 @@ fn FormItem(
         <label for=field.clone() class=move || format!("flex basis-3/6 sm:basis-3/6 md:basis-2/6 rounded-s-lg py-1 px-1 justify-center {} sm:py-1 ml-3 lg:ml-7 lg:text-sm md:text-xs", label_background_color())>
                 {field.clone().to_string() + " :"}</label>
             <div dir="rtl" class=move || format!("flex rounded-s-lg border-2 {} justify-center basis:-3/6 md:basis-4/6 sm:basis-3/6 mr-5 sm:py-0 sm:px-0", background_color())>
-            <input _ref=reference name=name dir="ltr" type=input_type placeholder=field.clone().to_string() + "..." id=field
+            <input _ref=_reference name=name dir="ltr" type=input_type placeholder=field.clone().to_string() + "..." id=field
                 class="w-100 decoration-2 focus:border-0 focus:outline-none decoration-amber-600 xs:py-0 xs:px-0 mx-5" style="width: 100%"
                 on:input=Callback::on_keypress_callback(cx, background_color_setter, validator, label_background_color_setter, toggle)
                 value=move ||
@@ -538,7 +540,7 @@ fn FormInputItems(
               cx,
                 <Show when=move || item.display_case.contains(&toggle) fallback = |_| ()>
                   <div class="flex flex-col">
-                      <FormItem field=item.field input_type=item.input_type name=item.name reference=item.reference validator=item.validator toggle/>
+                      <FormItem field=item.field input_type=item.input_type name=item.name _reference=item.reference validator=item.validator toggle/>
                         <Show when=move || matches!(toggle, AppState::Signup | AppState::Validate) fallback = |_| ()>
                               {move || item.validation_getter}
                         </Show>

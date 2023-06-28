@@ -1,7 +1,8 @@
+use iter_tools::Itertools;
 use leptos::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserModel {
     pub id: i32,
     pub first_name: String,
@@ -28,7 +29,7 @@ pub struct ConversationMeta {
     pub other_users: Vec<(String, String, i32)>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct UserLogin {
     pub id: i32,
     pub email: String,
@@ -147,10 +148,12 @@ pub struct MessageStructFacing {
     pub last_name: String,
 }
 
-use crate::{
-    app::{EmailSchema, FormValidation, PhoneSchema, VerificationValidation, VerifyPassword},
-    entities::{conversation, user_conversation},
-};
+use crate::app::{EmailSchema, PhoneSchema, VerificationValidation, VerifyPassword};
+
+#[cfg(feature = "ssr")]
+use crate::entities::{conversation, user_conversation};
+#[cfg(feature = "ssr")]
+use crate::app::FormValidation;
 
 #[derive(Debug, Serialize, Deserialize)]
 enum UserValidation {
@@ -259,7 +262,7 @@ impl RetrieveConversations {
                     .unwrap()
     }
 
-    async fn retrieve_associated_users(user: UserLogin, data: &sea_orm::DatabaseConnection, condition: sea_orm::Condition) -> Vec<FacingMessageInfo> {
+    async fn retrieve_associated_users(_user: UserLogin, data: &sea_orm::DatabaseConnection, condition: sea_orm::Condition) -> Vec<FacingMessageInfo> {
 
                 let associated_users = UserConversation::find()
                     .filter(condition)
@@ -285,7 +288,7 @@ impl RetrieveConversations {
 
                 associated_users
                     .into_iter()
-                    .map(Into::into)
+                    .map_into()
                     .collect()
             }
 
@@ -300,7 +303,7 @@ impl RetrieveConversations {
                         crate::entities::users::server::Column::LastName,
                 ])
                     .order_by_asc(message::server::Column::MessageCreatedAt).into_model::<MessageStruct>().all(data)
-                    .await.unwrap().into_iter().map(Into::into).collect()
+                    .await.unwrap().into_iter().map_into().collect()
             }
 
             async fn retrieve_seen(messages: &Vec<MessageStructFacing>, data: &sea_orm::DatabaseConnection) -> Vec<SeenMessageFacing> {
@@ -318,7 +321,7 @@ impl RetrieveConversations {
                         crate::entities::users::server::Column::LastName,
                     ])
                     .join(JoinType::LeftJoin, seen_messages::server::Relation::Users.def()).into_model::<SeenMessageStruct>()
-                    .all(data).await.unwrap().into_iter().map(Into::into).collect()
+                    .all(data).await.unwrap().into_iter().map_into().collect()
 
             }
 
@@ -326,19 +329,6 @@ impl RetrieveConversations {
                 Users::find().filter(users::server::Column::Id.eq(user_id)).one(data).await.unwrap().unwrap().image
             }
 
-            // async fn retrieve_group_conversations(name: String, user_ids: Vec<i32>, data: &sea_orm::DatabaseConnection) -> Option<Vec<MergedConversation>> {
-            //     let mut condition = Condition::all().add(user_conversation::server::Column::UserIds.is_in(user_ids)).add(conversation::server::Column::Name.eq(&name));
-
-            //     UserConversation::find()
-            //         .filter(condition)
-            //         .inner_join(Conversation)
-            //         .columns::<crate::entities::conversation::server::Column, Vec<_>>(vec![
-            //             crate::entities::conversation::server::Column::Name,
-            //         ])
-            //         .one(data).await.unwrap()
-            //         .into_iter().map(Into::into).collect()
-
-            // }
 }
 
 pub struct AppendDatabase;
@@ -379,7 +369,6 @@ impl AppendDatabase {
                             seen_id: ActiveValue::Set(user_id),
                         })
                         .collect();
-
                     SeenMessages::insert_many(insert_data)
                         .exec(data)
                         .await
@@ -399,20 +388,20 @@ impl AppendDatabase {
             }
 
             async fn modify(user: UserLogin, image: Option<String>, data: &sea_orm::DatabaseConnection, first_name: Option<String>, last_name: Option<String>) {
-                let mut user: users::server::ActiveModel = Users::find_by_id(user.id).one(data).await.unwrap().unwrap().into();
+                let mut user_model: users::server::ActiveModel = Users::find_by_id(user.id).one(data).await.unwrap().unwrap().into();
                 if let Some(image_path) = image {
-                    user.image = Set(Some(image_path));
+                    user_model.image = Set(Some(image_path));
                 }
 
                 if let Some(first_name) = first_name {
-                    user.first_name = Set(first_name);
+                    user_model.first_name = Set(first_name);
                 }
 
                 if let Some(last_name) = last_name {
-                    user.last_name = Set(last_name);
+                    user_model.last_name = Set(last_name);
                 }
 
-                Users::update(user).exec(data).await.unwrap();
+                Users::update(user_model).exec(data).await.unwrap();
             }
 
 }
@@ -498,7 +487,9 @@ pub async fn sign_up(
                             phone_number: ActiveValue::Set(
                                 form.phone_number
                                     .entry
-                                    .replace('+', "")
+                                    .chars()
+                                    .filter(|c| c.is_ascii_digit())
+                                    .collect::<String>()
                                     .parse::<i64>()
                                     .unwrap(),
                             ),
@@ -594,7 +585,6 @@ pub async fn cred_validation(
                                 .clone()
                                 .unwrap()
                                 .entry
-                                .replace('+', "")
                                 .parse::<i64>()
                                 .unwrap()),
                         )
@@ -726,14 +716,19 @@ pub async fn login(
                                 &request.extensions(),
                                 serde_json::to_string_pretty(&UserLogin {
                                     id: user.id,
-                                    email: user.email,
-                                    first_name: user.first_name,
-                                    last_name: user.last_name,
+                                    email: user.email.clone(),
+                                    first_name: user.first_name.clone(),
+                                    last_name: user.last_name.clone(),
                                 })
                                 .unwrap(),
                             )
                             .unwrap();
-                            Ok(VerifyPassword::Success)
+                            Ok(VerifyPassword::Success(UserLogin {
+                                    id: user.id,
+                                    email: user.email,
+                                    first_name: user.first_name,
+                                    last_name: user.last_name,
+                                }))
                         }
                         false => Ok(VerifyPassword::IncorrectCredentials),
                     }
@@ -803,7 +798,7 @@ pub async fn get_users(cx: Scope) -> Result<Vec<UserModel>, ServerFnError> {
     .unwrap()
     .unwrap()
     .into_iter()
-    .map(Into::into)
+    .map_into()
     .rev()
     .collect())
 }
@@ -850,66 +845,70 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
 
                 let seen_messages = RetrieveConversations::retrieve_seen(&messages, data).await;
 
-                let mut vec_merged_conversation = Vec::new();
+                let vec_merged_conversation = conversations
+                    .iter()
+                    .map(|conversation| {
+                        let conversation_id = conversation.conversation_id;
+                        let conversation_users = users
+                            .iter()
+                            .filter(|user| user.conversation_id == conversation_id)
+                            .collect_vec();
 
-                for conversation in &conversations {
-                    let users: Vec<_> = users
-                        .iter()
-                        .filter(|user| user.conversation_id == conversation.conversation_id)
-                        .collect();
+                        let merged_messages: Vec<MergedMessages> = messages
+                            .iter()
+                            .filter(|message| message.message_conversation_id == conversation_id)
+                            .map(|messages| {
+                                let seen_status = seen_messages
+                                    .iter()
+                                    .filter(|seen_messages| {
+                                        seen_messages.message_id.unwrap() == messages.message_id
+                                    })
+                                    .cloned()
+                                    .collect_vec();
 
-                    let merged_messages: Vec<MergedMessages> = messages
-                        .iter()
-                        .map(|messages| MergedMessages {
-                            message_conversation_id: messages.message_conversation_id,
-                            message_id: messages.message_id,
-                            message_body: messages.message_body.clone(),
-                            message_image: messages.message_image.clone(),
-                            message_sender_id: messages.message_sender_id,
-                            seen_status: seen_messages
-                                .clone()
-                                .into_iter()
-                                .filter(|seen_messages| {
-                                    seen_messages.message_id.unwrap() == messages.message_id
-                                })
-                                .collect(),
-                            created_at: messages.message_created_at.to_string(),
-                            first_name: messages.first_name.clone(),
-                            last_name: messages.last_name.clone(),
-                        })
-                        .collect::<Vec<MergedMessages>>();
+                                MergedMessages {
+                                    message_conversation_id: messages.message_conversation_id,
+                                    message_id: messages.message_id,
+                                    message_body: messages.message_body.clone(),
+                                    message_image: messages.message_image.clone(),
+                                    message_sender_id: messages.message_sender_id,
+                                    seen_status,
+                                    created_at: messages.message_created_at.to_string(),
+                                    first_name: messages.first_name.clone(),
+                                    last_name: messages.last_name.clone(),
+                                }
+                            })
+                            .collect();
 
-                    vec_merged_conversation.push(MergedConversation {
-                        conversation_id: conversation.conversation_id,
-                        conversation: ConversationInner {
-                            user_ids: users
-                                .iter()
-                                .rev()
-                                .map(|&users| *users.user_ids.first().unwrap())
-                                .collect(),
-                            last_name: users
-                                .iter()
-                                .find(|&users| *users.user_ids.first().unwrap() != user.id)
-                                .unwrap()
-                                .last_name
-                                .clone(),
-                            first_name: users
-                                .iter()
-                                .find(|&users| *users.user_ids.first().unwrap() != user.id)
-                                .unwrap()
-                                .first_name
-                                .clone(),
-                            name: conversation.name.clone(),
-                            is_group: conversation.is_group,
-                            messages: merged_messages
-                                .into_iter()
-                                .filter(|message| {
-                                    message.message_conversation_id == conversation.conversation_id
-                                })
-                                .collect(),
-                        },
-                    });
-                }
+                        let (last_name, first_name) = conversation_users
+                            .iter()
+                            .find(|&users| *users.user_ids.first().unwrap() != user.id)
+                            .map(|user| (user.last_name.clone(), user.first_name.clone()))
+                            .unwrap();
+
+                        let conversation_messages = merged_messages
+                            .into_iter()
+                            .filter(|message| message.message_conversation_id == conversation_id)
+                            .collect();
+
+                        MergedConversation {
+                            conversation_id,
+                            conversation: ConversationInner {
+                                user_ids: conversation_users
+                                    .iter()
+                                    .rev()
+                                    .map(|user| *user.user_ids.first().unwrap())
+                                    .collect(),
+                                last_name,
+                                first_name,
+                                name: conversation.name.clone(),
+                                is_group: conversation.is_group,
+                                messages: conversation_messages,
+                            },
+                        }
+                    })
+                    .collect();
+
                 Ok(vec_merged_conversation)
             }
         },
@@ -1293,7 +1292,7 @@ pub async fn handle_message_input(
                     };
 
                     let kind = infer::get(&image_vec).expect("file type is known");
-                    let image = if kind.mime_type().ne("image/png") {
+                    let image = if !kind.mime_type().eq("image/png") {
                         let image = ImageReader::new(std::io::Cursor::new(image_vec))
                             .with_guessed_format()
                             .unwrap()
@@ -1369,7 +1368,7 @@ pub async fn handle_seen(cx: Scope, conversation_id: i32) -> Result<(), ServerFn
                         .iter()
                         .map(|messages| messages.message_id)
                         .collect();
-
+                log!("MESSAGES {messages:?}");
                 AppendDatabase::insert_seen(data, messages, user.id).await;
                 Ok(())
             }
@@ -1497,18 +1496,24 @@ pub async fn upload_user_info(
                     };
 
                     let image_path = "images/".to_string() + &current_time + ".png";
-                    let image = ImageReader::new(std::io::Cursor::new(image))
-                        .with_guessed_format()
+                    let image = if !kind.mime_type().eq("image/png") {
+                        let image = ImageReader::new(std::io::Cursor::new(image))
+                            .with_guessed_format()
+                            .unwrap()
+                            .decode()
+                            .unwrap();
+
+                        turbojpeg::compress_image(
+                            &image.into_rgba8(),
+                            50,
+                            turbojpeg::Subsamp::Sub2x2,
+                        )
                         .unwrap()
-                        .decode()
-                        .unwrap();
-                    let compressed_image = turbojpeg::compress_image(
-                        &image.into_rgba8(),
-                        50,
-                        turbojpeg::Subsamp::Sub2x2,
-                    )
-                    .unwrap();
-                    std::fs::write(&image_path, compressed_image).unwrap();
+                        .to_vec()
+                    } else {
+                        image
+                    };
+                    std::fs::write(&image_path, image).unwrap();
 
                     AppendDatabase::modify(
                         user,
@@ -1542,13 +1547,16 @@ pub async fn get_icon(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnErr
                 let image = RetrieveConversations::retrieve_images(id, data).await;
                 if let Some(image) = image {
                          let path = std::env::current_dir()
-                             .unwrap()
+                             .unwrap_or_default()
                              .join(image);
 
-                         let mut file = std::fs::File::open(path).unwrap();
-                         let mut buffer = Vec::new();
-                         file.read_to_end(&mut buffer).unwrap();
-                         Some(buffer)
+                         if let Ok(mut file) = std::fs::File::open(path) {
+                             let mut buffer = Vec::new();
+                             file.read_to_end(&mut buffer).unwrap();
+                             Some(buffer)
+                        } else {
+                             None
+                        }
                 } else {
                     None
                 }

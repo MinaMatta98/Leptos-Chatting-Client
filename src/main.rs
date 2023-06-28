@@ -1,11 +1,12 @@
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
+#![feature(drain_filter)]
 use actix::Addr;
 use actix::*;
-use actix_web::web::{self, BytesMut};
+use actix_web::web;
 use actix_web::{
-    cookie::Key, dev, get, http::StatusCode, App, Error, HttpRequest, HttpResponse, HttpServer,
+    cookie::Key, get, App, Error, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
 use actix_web_actors::ws;
@@ -71,6 +72,24 @@ async fn upload_path(path: actix_web::web::Path<String>, req: HttpRequest) -> Ht
     HttpResponse::Ok().body(buffer).respond_to(&req)
 }
 
+// Entry point for our websocket route
+#[get("/ws/icon/{id}")]
+async fn chat_route_icon(
+    req: HttpRequest,
+    stream: web::Payload,
+    path: web::Path<usize>,
+    srv: web::Data<Addr<web_socket::server::IconWs>>,
+) -> Result<HttpResponse, Error> {
+    ws::start(
+        web_socket::session::WsChatSessionIcon {
+            id: *path,
+            hb: std::time::Instant::now(),
+            addr: srv.get_ref().clone(),
+        },
+        &req,
+        stream,
+    )
+}
 // Entry point for our websocket route
 #[get("/ws/{id}")]
 async fn chat_route(
@@ -157,8 +176,9 @@ async fn main() -> std::io::Result<()> {
     let redis_address = "redis://127.0.0.1:6379";
     let secret_key = Key::generate();
     let redis_store = RedisSessionStore::new(redis_address).await.unwrap();
-    let app_state = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let server = web_socket::server::ChatServer::new(app_state.clone()).start();
+    let server = web_socket::server::ChatServer::new().start();
+    let icon_server = web_socket::server::IconWs::new().start();
+
     HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
         let site_root = &leptos_options.site_root;
@@ -167,13 +187,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(db_conn.clone())
             .app_data(actix_web::web::PayloadConfig::new(10_485_760))
-            .app_data(web::Data::from(app_state.clone()))
             .app_data(web::Data::new(server.clone()))
+            .app_data(web::Data::new(icon_server.clone()))
             .wrap(IdentityMiddleware::default())
             .wrap(SessionMiddleware::new(
                 redis_store.clone(),
                 secret_key.clone(),
             ))
+            .service(chat_route_icon)
             .service(chat_route)
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
             .leptos_routes(leptos_options.to_owned(), routes, |cx| view! { cx, <App/> })

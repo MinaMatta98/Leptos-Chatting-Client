@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
+#![feature(drain_filter)]
 
 use cfg_if::cfg_if;
 mod app;
