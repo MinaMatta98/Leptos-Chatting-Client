@@ -9,7 +9,7 @@ use crate::{app::{NameSchema, SignupSchema,
     FormValidation, validation::ValidationSchema,
     PasswordSchema, VerifyPassword},
     server_function::{ConfirmSubscription,
-    self, Login, sign_up, UserLogin}};
+    self, Login, sign_up}};
 
 use super::{VerificationValidation, SignupContext, AppState};
 

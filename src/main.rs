@@ -1,14 +1,10 @@
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
-#![feature(drain_filter)]
 use actix::Addr;
 use actix::*;
 use actix_web::web;
-use actix_web::{
-    cookie::Key, get, App, Error, HttpRequest, HttpResponse, HttpServer,
-    Responder,
-};
+use actix_web::{cookie::Key, get, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 pub use sea_orm::{Database, DbErr, *};
 pub mod app;
@@ -73,7 +69,7 @@ async fn upload_path(path: actix_web::web::Path<String>, req: HttpRequest) -> Ht
 }
 
 // Entry point for our websocket route
-#[get("/ws/icon/{id}")]
+#[get("/ws/icons/{id}")]
 async fn chat_route_icon(
     req: HttpRequest,
     stream: web::Payload,
@@ -90,6 +86,7 @@ async fn chat_route_icon(
         stream,
     )
 }
+
 // Entry point for our websocket route
 #[get("/ws/{id}")]
 async fn chat_route(
@@ -122,9 +119,9 @@ async fn main() -> std::io::Result<()> {
     use actix_web::middleware::{Compress, Logger, NormalizePath};
     use server_function::{
         AssociatedConversation, ConfirmSubscription, ConversationAction, CreateGroupConversation,
-        DeleteConversation, FindImage, GetConversations, GetIcon, GetUser, GetUsers,
+        DeleteConversation, FindImage, GetConversations, GetIcon, GetImage, GetUser, GetUsers,
         HandleMessageInput, HandleSeen, Login, LoginStatus, Logout, Redirect, SignUp, UploadImage,
-        Validate, ValidateConversation, VerifyEmail, ViewMessages, GetImage
+        Validate, ValidateConversation, VerifyEmail, ViewMessages,
     };
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;

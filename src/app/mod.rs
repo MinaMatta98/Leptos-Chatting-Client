@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use fancy_regex::Regex;
 use leptos::{
     html::{Div, Input},
@@ -24,7 +22,7 @@ use crate::{
     server_function::UserLogin,
 };
 
-use self::pages::components::avatar::UserIcon;
+use self::pages::components::avatar::{ICONVEC, SINKVEC, STREAMVEC};
 
 #[derive(Debug, Clone)]
 pub struct EmailContext {
@@ -67,11 +65,6 @@ pub struct IsOpen {
 pub struct SignupContext {
     status: ReadSignal<bool>,
     status_setter: WriteSignal<bool>,
-}
-
-#[derive(Debug, Clone)]
-pub struct IconVec {
-    icons: RwSignal<HashMap<i32, UserIcon>>
 }
 
 #[derive(Serialize, Deserialize, Validate, Clone, Debug, PartialEq)]
@@ -229,7 +222,6 @@ pub fn App(cx: Scope) -> impl IntoView {
                     <Route path="/validate" view=|cx| view! { cx, <HomePage toggle=AppState::Validate/> } ssr = SsrMode::Async/>
                     <Route path="/user" view=|cx| view! { cx, <Users /> } ssr = SsrMode::Async/>
                     <Route path="/conversations" view=|cx| view! { cx, <Conversations/>  } ssr = SsrMode::Async>
-                        <Route path=":id" view=|cx| view! { cx, <ConversationId/> } ssr = SsrMode::Async/>
                         <Route path="/" view=|cx| view! { cx,
                                                      <div>
                                                         <div class=move || format!("lg:pl-80 h-screen
@@ -239,6 +231,7 @@ pub fn App(cx: Scope) -> impl IntoView {
                                                         </div>
                                                      </div>
                         } ssr = SsrMode::Async/>
+                        <Route path=":id" view=|cx| view! { cx, <ConversationId/> } ssr = SsrMode::Async/>
                     </Route>
                 </Routes>
             </main>
@@ -250,6 +243,9 @@ pub fn App(cx: Scope) -> impl IntoView {
 #[component]
 fn HomePage(cx: Scope, toggle: AppState) -> impl IntoView {
     // Creates a reactive value to update the button
+    ICONVEC.write().clear();
+    STREAMVEC.write().clear();
+    SINKVEC.write().clear();
 
     create_effect(cx, move |_| {
         if toggle == AppState::Validate

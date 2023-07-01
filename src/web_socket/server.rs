@@ -371,7 +371,9 @@ impl Handler<Disconnect> for IconWs {
             // remove session from all rooms
             self.users = self
                 .users
-                .drain_filter(|&mut user| user == msg.id)
+                .iter()
+                .filter_map(|&user| if user == msg.id { Some(user) } else { None })
+                // .drain_filter(|&mut user| user == msg.id)
                 .collect()
         }
     }

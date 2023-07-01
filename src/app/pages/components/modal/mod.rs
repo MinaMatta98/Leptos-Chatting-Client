@@ -6,15 +6,15 @@ use leptos_icons::*;
 use leptos_router::{use_navigate, ActionForm};
 use web_sys::MouseEvent;
 
-use crate::app::pages::components::avatar::{base_64_encode_uri, ICONVEC};
+use crate::app::pages::components::avatar::base_64_encode_uri;
 use crate::app::pages::websocket::HandleWebSocket;
 use crate::app::pages::{get_current_id, Button, ButtonVal, Select, UserContext, UserInput};
-use crate::app::{DrawerContext, MessageDrawerContext, IconVec};
+use crate::app::{DrawerContext, MessageDrawerContext};
 use crate::server_function::{
     delete_conversations, login_status, upload_user_info, CreateGroupConversation,
 };
 
-use super::avatar;
+use super::avatar::{self, *};
 
 #[component]
 pub fn Modal(cx: Scope, children: Children, context: RwSignal<bool>) -> impl IntoView {
@@ -72,9 +72,9 @@ pub fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
                             {move || err_result_signal}
                         </p>
                         <div class="mt-10 flex flex-col gap-y-8">
-                            <UserInput id="name" label="Group Name" input_type="text" required=true disabled=ButtonVal::RwSignal(disable_signal) placeholder=String::from("Group Name...") _ref=name_ref/>
+                            <UserInput id="name" label="Group Name" input_type="text" required=true disabled=ButtonVal::RwSignal(disable_signal) placeholder=String::from("Group Name...") node_ref=name_ref/>
                             <input name="is_group" value="true" class="hidden"/>
-                            <Select disabled=disable_signal label="Members" _ref=input_ref input_signal/>
+                            <Select disabled=disable_signal label="Members" input_ref=input_ref input_signal/>
                         </div>
                     </div>
                 </div>
@@ -191,11 +191,12 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                     let base64_encoded_image =
                         general_purpose::STANDARD_NO_PAD.encode(*file.clone());
                     let data_uri = base_64_encode_uri(base64_encoded_image);
-                    let id = if let 0 = (move || use_context::<UserContext>(cx).unwrap().id.get())()
+                    let id = if let 0 =
+                        (move || use_context::<UserContext>(cx).unwrap().id.get_untracked())()
                     {
                         login_status(cx).await.unwrap().id
                     } else {
-                        use_context::<UserContext>(cx).unwrap().id.get()
+                        use_context::<UserContext>(cx).unwrap().id.get_untracked()
                     };
 
                     HandleWebSocket::handle_sink_stream(
@@ -204,7 +205,6 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                             data: data_uri,
                         },
                         id,
-                        "ws://localhost:8000/ws/icon/",
                     )
                     .await;
                 } else {
@@ -233,22 +233,19 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                         <Suspense fallback=||()>
                         {move || status.read(cx).map(|user| {
                             let user = user.unwrap();
-                            let fetched_image = ICONVEC::fetch_image(user.id, cx);
+                            // let fetched_image = ICONVEC::fetch_image(user.id, cx);
                             view!{cx,
                                 <div class="mt-10 flex flex-col gap-y-8">
-                                    <UserInput id="first_name" _ref=first_name_ref input_type="text" label="First Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.first_name/>
+                                    <UserInput id="first_name" node_ref=first_name_ref input_type="text" label="First Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.first_name/>
                                 </div>
                                 <div class="mt-10 flex flex-col gap-y-8">
-                                    <UserInput id="last_name" _ref=last_name_ref input_type="text" label="Last Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.last_name/>
+                                    <UserInput id="last_name" node_ref=last_name_ref input_type="text" label="Last Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.last_name/>
                                 </div>
                                 <div class="mt-10 flex flex-col gap-y-3">
                                     <label class="block text-sm font-medium leading-6 text-gray-900">
                                         "Photo"
                                     </label>
-                                        {let fetched_image = fetched_image.clone();
-                                            move ||
-                                            ICONVEC::render_image(fetched_image.clone(), cx, user.id, false, true)
-                                        }
+                                    <Avatar id=user.id/>
                                         <div class="flex gap-x-3">
                                               <Button on_click=move |_| image_ref.get().unwrap().click() button_type="button" disabled=ButtonVal::Bool(false) color="bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-600">
                                                 "Upload"

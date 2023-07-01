@@ -1,18 +1,13 @@
-use std::collections::HashMap;
-
 use base64::{engine::general_purpose, Engine as _};
-use chrono::SubsecRound;
 
-use super::{
-    DrawerContext, IconVec, MessageDrawerContext, SeenContext, SeenContextInner, SideBarContext,
-};
+use super::{DrawerContext, MessageDrawerContext, SeenContext, SeenContextInner, SideBarContext};
 use crate::{
     app::{pages::components::avatar, IsOpen},
     server_function::{
         self, associated_conversation, conversation_action, find_image, get_conversations,
         get_image, get_users, handle_seen, login_status, validate_conversation, view_messages,
-        ConversationMeta, ImageAvailability, MergedConversation, MergedMessages, SeenMessageFacing,
-        UserLogin, UserModel,
+        ConversationMeta, ImageAvailability, MergedConversation, MergedMessages, UserLogin,
+        UserModel,
     },
 };
 use leptos::{
@@ -26,7 +21,7 @@ use web_sys::{Element, SubmitEvent};
 pub mod components;
 pub mod websocket;
 use components::{avatar::*, modal::*};
-use websocket::*;
+pub use websocket::*;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct Message {
@@ -127,12 +122,6 @@ impl UserContexts {
 
         provide_context(
             cx,
-            IconVec {
-                icons: create_rw_signal(cx, HashMap::new()),
-            },
-        );
-        provide_context(
-            cx,
             SideBarContext {
                 status: create_rw_signal(cx, false),
             },
@@ -220,9 +209,9 @@ fn loading_fallback(cx: Scope) -> Box<dyn Fn() -> View> {
 #[component]
 pub fn Users(cx: Scope) -> impl IntoView {
     UserContexts::init_users(cx);
-    {
-        ICONVEC.write().clear()
-    }
+    ICONVEC.write().clear();
+    STREAMVEC.write().clear();
+    SINKVEC.write().clear();
     view! {cx,
         <Sidebar>
             <UserList/>
@@ -274,9 +263,18 @@ fn DesktopSidebar(cx: Scope) -> impl IntoView {
 
     let settings_modal_setter = create_rw_signal(cx, false);
 
-    let status = create_resource(cx, || (), move |_| async move { login_status(cx).await });
+    let status = create_local_resource(cx, || (), move |_| async move { login_status(cx).await });
 
     view! {cx,
+        <Suspense fallback=||()>
+        {move || status.read(cx).map(|status| {
+        let UserLogin {email, id, first_name, last_name} = status.expect("Error obtaining user context");
+         let user_context = use_context::<UserContext>(cx).unwrap();
+         user_context.email.set(email);
+         user_context.id.set(id);
+         user_context.first_name.set(first_name);
+         user_context.last_name.set(last_name);
+        view!{cx,
         <SettingsModal settings_modal_setter/>
         <div class="hidden lg:fixed lg:inset-y-0 lg:left-0
             lg:z-40 lg:w-20 xl:px-6 lg:overflow-y-auto lg:bg-white
@@ -290,26 +288,17 @@ fn DesktopSidebar(cx: Scope) -> impl IntoView {
                     }/>
                  </ul>
             </nav>
-            <Suspense fallback=||()>
-            {move || status.read(cx).map(|status| {
-                // let user_context = use_context::<UserContext>(cx).unwrap();
-                // let UserLogin {email, id, first_name, last_name} = status.expect("Error obtaining user context");
-                // user_context.email.set(email);
-                // user_context.id.set(id);
-                // user_context.first_name.set(first_name);
-                // user_context.last_name.set(last_name);
-                     view!{cx,
-                         <nav class="mt-4 flex flex-col
-                             justify-center items-center">
-                                 <div class="cursor-pointer
-                                     hover:opacity-75 transition" on:click=move |_| settings_modal_setter.set(true)>
-                                    <Avatar id=status.unwrap().id/>
-                                 </div>
-                         </nav>
-                     }}
-            )}
+            <nav class="mt-4 flex flex-col
+                justify-center items-center">
+                    <div class="cursor-pointer
+                        hover:opacity-75 transition" on:click=move |_| settings_modal_setter.set(true)>
+                    <Avatar id/>
+                    </div>
+            </nav>
+            </div>
+                     }
+            })}
             </Suspense>
-        </div>
     }
 }
 
@@ -379,25 +368,6 @@ fn UserList(cx: Scope) -> impl IntoView {
                 <div class="flex-col">
                     <div class="text-2xl font-bold text-neutral-800 py-4">
                         "Users"
-                        // <Suspense fallback=||()>
-                        //     {move || status.read(cx).map(|user|
-                        //             spawn_local(async move {
-                        //                 // let id = move || use_context::<UserContext>(cx).unwrap().id;
-                        //                  HandleWebSocket::handle_split_stream::<Option<RwSignal<IconType>>, avatar::IconData>(
-                        //                      cx,
-                        //                      user.unwrap().id,
-                        //                      None,
-                        //                      "ws://localhost:8000/ws/icon/",
-                        //                      |_signal, value: avatar::IconData| {
-                        //                          ICONVEC::init_and_return_signal(value.user_id, cx).update(|signal|
-                        //                             *signal = IconType::String(value.data)
-                        //                      );
-                        //                     }
-                        //                  )
-                        //                  .await
-                        //     })
-                        //     )}
-                        // </Suspense>
                     </div>
                 </div>
                 <UserBox/>
@@ -429,13 +399,11 @@ fn UserBox(cx: Scope) -> impl IntoView {
         <Suspense fallback=loading_fallback(cx)>
             {move || users_arr.read(cx).map(|items| {
                 let items = items.unwrap();
-                log!("items {:?}", items);
                 view!{cx,
                         <For
                           each=move || items.clone()
                           key=|items| items.id
                           view=move |cx, item: UserModel| {
-                                log!("{:?}", item);
                                         view!{cx,
                                              <div class="w-full relative flex
                                                  items-center space-x-3 bg-white
@@ -464,31 +432,45 @@ fn UserBox(cx: Scope) -> impl IntoView {
 
 #[component]
 pub fn Conversations(cx: Scope) -> impl IntoView {
-    UserContexts::init_all(cx);
-    {
-        ICONVEC.write().clear()
-    }
+    ICONVEC.write().clear();
+    STREAMVEC.write().clear();
+    SINKVEC.write().clear();
 
+    UserContexts::init_all(cx);
+    let status = create_local_resource(cx, || (), move |_| async move { login_status(cx).await });
     use_context::<IsOpen>(cx).unwrap().status.set(false);
 
     view! {cx,
-        <ConversationsLayout>
-            <Outlet/>
-        </ConversationsLayout>
+            <Suspense fallback=||()>
+                {move || status.read(cx).map(|status| {
+                    let user_context = use_context::<UserContext>(cx).unwrap();
+                    let UserLogin {email, id, first_name, last_name} = status.expect("Error obtaining user context");
+                    user_context.email.set(email);
+                    user_context.id.set(id);
+                    user_context.first_name.set(first_name);
+                    user_context.last_name.set(last_name);
+                view!{cx,
+                    <ConversationsLayout>
+                        <Outlet/>
+                    </ConversationsLayout>
+                }
+                })}
+            </Suspense>
     }
 }
 
 #[component]
 fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
     let conversations = create_resource(
-        cx, || (),
+        cx,
+        || (),
         // move || {
         //     use_context::<MessageDrawerContext>(cx)
         //         .unwrap()
         //         .status
         //         .get()
         // },
-        move |_| async move { get_conversations(cx).await.unwrap() },
+        move |_| async move { get_conversations(cx).await },
     );
 
     let group_chat_context = create_rw_signal(cx, false);
@@ -496,10 +478,10 @@ fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
     view! {cx,
         <Sidebar>
             <div class="h-screen">
-                <GroupChatModal context=group_chat_context/>
                 <Suspense fallback=||()>
-                {move || conversations.read(cx).map(|val: Vec<MergedConversation>|{
+                {move || conversations.read(cx).map(|val|{
                 view!{cx,
+                            <GroupChatModal context=group_chat_context/>
                                 <aside class=move || format!("fixed inset-y-0 pb-20 lg:pb-0
                                     lg:left-20 lg:w-80 lg:block overflow-y-auto border-r
                                     border-gray-200 {}", if use_context::<IsOpen>(cx).unwrap().status.get()
@@ -515,7 +497,7 @@ fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
                                             </div>
                                         </div>
                                      <For
-                                       each=move || val.clone()
+                                       each=move || val.clone().unwrap()
                                        key=|val| val.conversation_id
                                        view=move |cx, item: MergedConversation| {
                                         view! {cx,
@@ -537,6 +519,7 @@ fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
 fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
     let seen_status = create_rw_signal(cx, false);
     let cloned_item = item.clone();
+    let secondary_cloned_item = item.clone();
 
     let message_signal = create_rw_signal(cx, String::new());
 
@@ -568,24 +551,27 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
     };
 
     view! {cx,
-        <A href=format!("/conversations/{}", &cloned_item.conversation_id.to_string())
+        <A href=format!("{}", &cloned_item.conversation_id.to_string())
                 class=move || format!("w-full relative flex items-center space-x-3 hover:bg-neutral-100 rounded-lg transition cursor-pointer p-3 {}",
                 if query() {"bg-neutral-100"} else {"bg-white"})>
-            {
-
+                <Suspense fallback=||()>
+            {let cloned_item = cloned_item.clone();
+                move ||
                 match cloned_item.conversation.is_group {
-                true => view!{cx, <><AvatarGroup user_ids=cloned_item.conversation.user_ids/></> },
-                false => view!{cx, <><Avatar id=*cloned_item.conversation.user_ids.iter().find(|&&user| user != use_context::<UserContext>(cx).unwrap().id.get()).unwrap()/></> }
+                true => view!{cx, <><AvatarGroup user_ids=cloned_item.conversation.user_ids.clone()/></> },
+                false => view!{cx, <>
+                    <Avatar id=*cloned_item.conversation.user_ids.iter().find(|&&user| user != use_context::<UserContext>(cx).unwrap().id.get()).unwrap()/></> }
                 }
             }
+                </Suspense>
             <div class="min-w-0 flex-1">
                 <div class="focus:outline-none">
                     <div class="flex justify-between items-center mb-1">
                         <p class="text-md font-medium font-bold text-gray-900">
                             {
-                                match cloned_item.conversation.is_group {
-                                    true => cloned_item.conversation.name.unwrap(),
-                                    false => cloned_item.conversation.first_name + " " + &cloned_item.conversation.last_name
+                                match secondary_cloned_item.conversation.is_group {
+                                    true => secondary_cloned_item.conversation.name.unwrap(),
+                                    false => secondary_cloned_item.conversation.first_name + " " + &secondary_cloned_item.conversation.last_name
                                 }
 
                             }
@@ -658,11 +644,10 @@ pub fn ConversationId(cx: Scope) -> impl IntoView {
 
     create_effect(cx, move |_| {
         spawn_local(async move {
-            create_resource(cx, current_id, move |current_id| async move {
-                handle_seen(cx, current_id).await.unwrap();
-            });
+            handle_seen(cx, current_id()).await.unwrap();
         })
     });
+
     view! {cx,
 
         <ConfirmModal/>
@@ -762,7 +747,7 @@ fn Header(cx: Scope, conversation: Vec<ConversationMeta>) -> impl IntoView {
 
 #[component]
 fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
-    let messages_signal = create_rw_signal(cx, Vec::new());
+    // let messages_signal = create_rw_signal(cx, Vec::new());
 
     let seen_context = use_context::<SeenContext>(cx).unwrap().status;
 
@@ -788,38 +773,38 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
     });
     let last_clone = last.clone();
 
-    spawn_local(async move {
-        HandleWebSocket::handle_split_stream(
-            cx,
-            get_current_id(cx)(),
-            Some(messages_signal),
-            "ws://localhost:8000/ws/",
-            |message_vec, value: Message| {
-                message_vec.unwrap().push(MergedMessages {
-                    first_name: value.first_name.clone(),
-                    last_name: value.last_name.clone(),
-                    created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
-                    message_sender_id: value.user_id,
-                    message_body: value.message.clone(),
-                    message_image: value.image,
-                    message_conversation_id: value.conversation_id,
-                    seen_status: value
-                        .seen
-                        .unwrap()
-                        .iter()
-                        .map(|(first_name, last_name)| SeenMessageFacing {
-                            seen_id: Some(value.user_id),
-                            message_id: None,
-                            first_name: Some(first_name.to_string()),
-                            last_name: Some(last_name.to_string()),
-                        })
-                        .collect(),
-                    message_id: last() + 1,
-                })
-            },
-        )
-        .await;
-    });
+    // spawn_local(async move {
+    //     HandleWebSocket::handle_split_stream(
+    //         cx,
+    //         get_current_id(cx)(),
+    //         Some(messages_signal),
+    //         "ws://localhost:8000/ws/",
+    //         |message_vec, value: Message| {
+    //             message_vec.unwrap().push(MergedMessages {
+    //                 first_name: value.first_name.clone(),
+    //                 last_name: value.last_name.clone(),
+    //                 created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
+    //                 message_sender_id: value.user_id,
+    //                 message_body: value.message.clone(),
+    //                 message_image: value.image,
+    //                 message_conversation_id: value.conversation_id,
+    //                 seen_status: value
+    //                     .seen
+    //                     .unwrap()
+    //                     .iter()
+    //                     .map(|(first_name, last_name)| SeenMessageFacing {
+    //                         seen_id: Some(value.user_id),
+    //                         message_id: None,
+    //                         first_name: Some(first_name.to_string()),
+    //                         last_name: Some(last_name.to_string()),
+    //                     })
+    //                     .collect(),
+    //                 message_id: last() + 1,
+    //             })
+    //         },
+    //     )
+    //     .await;
+    // });
 
     view! {cx,
             <div class="flex-1 overflow-y-auto ">
@@ -831,19 +816,19 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
                                 <MessageBox message=item.clone() is_last=(last_clone() == item.message_id)/>
                              }
                 }/>
-                    { move ||
-                        messages_signal.get().iter().map(|item|
-                            view! {cx,
-                                <MessageBox message=item.clone() is_last=(
-                                    if let Some(message) = messages_signal.get().last() {
-                                        log!("{}", message.message_id);
-                                        message.message_id == item.message_id
-                                    } else {
-                                        false
-                                    })/>
-                            }
-                        ).collect_view(cx)
-                    }
+                    // { move ||
+                    //     messages_signal.get().iter().map(|item|
+                    //         view! {cx,
+                    //             <MessageBox message=item.clone() is_last=(
+                    //                 if let Some(message) = messages_signal.get().last() {
+                    //                     log!("{}", message.message_id);
+                    //                     message.message_id == item.message_id
+                    //                 } else {
+                    //                     false
+                    //                 })/>
+                    //         }
+                    //     ).collect_view(cx)
+                    // }
              <div id="bottom_ref" class="pt-24"/>
         </div>
     }
@@ -1224,6 +1209,7 @@ where
     };
 
     view! {cx,
+        <label for="upload">
         <button
           on:click=on_click type=button_type disabled=disabled_val.clone()
           class=move || format!("flex justify-center rounded-md px-3 py-2 text-sm
@@ -1232,6 +1218,7 @@ where
                 text-white {} {}", color, if disabled_val() {"hidden"} else {""})>
           {children(cx)}
         </button>
+        </label>
     }
 }
 
@@ -1244,7 +1231,7 @@ fn UserInput(
     required: bool,
     disabled: ButtonVal,
     placeholder: String,
-    _ref: NodeRef<Input>,
+    node_ref: NodeRef<Input>,
 ) -> impl IntoView {
     let disabled_val = move || match disabled {
         ButtonVal::Bool(val) => val,
@@ -1257,13 +1244,13 @@ fn UserInput(
             {label}
           </label>
           <div class="mt-2">
-            <input id=id type=input_type name=id disabled=disabled_val() required=required _ref=_ref
+            <input id=id type=input_type name=id disabled=disabled_val() required=required node_ref=node_ref
               class=move || format!("form-input block w-full rounded-md border-0 py-1.5
                 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 
                 focus:ring-2 focus:outline-none focus:ring-inset pl-4 focus:ring-sky-600 sm:text-sm sm:leading-6 {}",
                 if disabled_val() {"opacity-50 cursor-default"} else {""}) placeholder=placeholder/>
           </div>
-        </div>
+    </div>
     }
 }
 
@@ -1272,15 +1259,15 @@ fn Select(
     cx: Scope,
     disabled: RwSignal<bool>,
     label: &'static str,
-    _ref: NodeRef<Input>,
+    input_ref: NodeRef<Input>,
     input_signal: RwSignal<Vec<(HtmlElement<Div>, i32)>>,
 ) -> impl IntoView {
     let hidden_state = create_rw_signal(cx, true);
 
-    let users = create_resource(
+    let users = create_local_resource(
         cx,
         move || hidden_state.get(),
-        move |_| async move { get_users(cx).await.unwrap() },
+        move |_| async move { get_users(cx).await },
     );
     view! {cx,
         <div class="z-[100]">
@@ -1293,27 +1280,27 @@ fn Select(
                 text-transparent select-none selection:bg-none {}", if disabled.get() {"opacity-50"} else {""})
                 placeholder="Select an option"
                 name="other_users"
-                _ref=_ref
+                node_ref=input_ref
                 on:click=move |_| hidden_state.update(|val| *val = !*val )/>
                      <For
                        each=move || input_signal.get()
                        key=|input| input.1
-                       view=move |_cx, item: (HtmlElement<Div>, i32)| {
+                       view=move |cx, item: (HtmlElement<Div>, i32)| {
                          view! {
-                           _cx,
+                           cx,
                              {item.0}
                         }
                      }/>
               <ul class=move || format!("absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg {}", if hidden_state.get() {"hidden"} else {"block"})>
-                <Suspense fallback=||()>
+                <Suspense fallback=loading_fallback(cx)>
                      {move || users.read(cx).map(|options|
                          view!{cx,
                              <For
-                               each=move || options.clone()
+                               each=move || options.clone().unwrap()
                                key=|user| user.id
                                view=move |cx, item: UserModel| {
                                       let li_ref = create_node_ref::<html::Li>(cx);
-                                      let input = _ref.get().unwrap();
+                                      let input = input_ref.get().unwrap();
                                           (! input.value().contains(&(item.id.to_string()))).then(|| {
                                             view! {
                                               cx,
