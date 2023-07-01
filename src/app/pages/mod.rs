@@ -463,13 +463,12 @@ pub fn Conversations(cx: Scope) -> impl IntoView {
 fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
     let conversations = create_resource(
         cx,
-        || (),
-        // move || {
-        //     use_context::<MessageDrawerContext>(cx)
-        //         .unwrap()
-        //         .status
-        //         .get()
-        // },
+        move || {
+            use_context::<MessageDrawerContext>(cx)
+                .unwrap()
+                .status
+                .get()
+        },
         move |_| async move { get_conversations(cx).await },
     );
 
