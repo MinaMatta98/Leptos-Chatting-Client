@@ -12,7 +12,6 @@ dump.rdb
 node_modules/
 test-results/
 images/
-src/styles/*
 upload/
 end2end/playwright-report/
 playwright/.cache/
