@@ -1,4 +1,4 @@
-# WIP Leptos-Chatting-Client
+# Leptos-Chatting-Client
 This repository demonstrates the use of the following crates:
 * [Actix-web](https://actix.rs/): Actix based backend for request management.
 * [Leptos-RS](https://github.com/leptos-rs/leptos): Server Side Rendering and Hydration framework utilizing web-assembly.
