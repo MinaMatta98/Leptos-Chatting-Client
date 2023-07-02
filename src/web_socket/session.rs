@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use actix::prelude::*;
 use actix_web_actors::ws;
 use iter_tools::Itertools;
+use leptos::log;
 
 use crate::app::pages::components::avatar;
 use crate::web_socket::server;
@@ -286,7 +287,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                                     .unique()
                                     .collect();
                                 text.seen = Some(filtered_users);
-                                println!("text {:?}", text);
+                                log!("TEXT RECEIVED {:?}", text);
+                                log!("ROOM {} ID {}", sess.room, sess.id);
                                 sess.addr.do_send(server::ClientMessage {
                                     id: sess.id,
                                     msg: serde_json::to_string_pretty(&text).unwrap(),

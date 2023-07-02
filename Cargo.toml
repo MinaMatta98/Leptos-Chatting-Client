@@ -53,6 +53,7 @@ image = { version = "0.24.6", features = ["rgb"], optional = true }
 turbojpeg = { version = "0.5.2", features = ["image"], optional = true }
 parking_lot = { version = "0.12.1", features = ["deadlock_detection", "hardware-lock-elision", "nightly", "arc_lock"] }
 async-broadcast = "0.5.1"
+async-channel = "1.8.0"
 
 [build-dependencies]
 pkg-config = "0.3.26"

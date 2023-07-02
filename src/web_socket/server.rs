@@ -112,16 +112,14 @@ impl ChatServer {
 
 impl ChatServer {
     /// Send message to all users in the room
-    fn send_message(&self, room: usize, message: &str, skip_id: usize) {
+    fn send_message(&self, room: usize, message: &str) {
         if let Some(sessions) = self.rooms.get(&room) {
             for id in sessions {
-                if *id != skip_id {
-                    if let Some(addr) = self.sessions.get(id) {
-                        addr.do_send(Message {
-                            message: message.to_owned(),
-                            conversation_id: room,
-                        });
-                    }
+                if let Some(addr) = self.sessions.get(id) {
+                    addr.do_send(Message {
+                        message: message.to_owned(),
+                        conversation_id: room,
+                    });
                 }
             }
         }
@@ -224,7 +222,7 @@ impl Handler<ClientMessage> for ChatServer {
     type Result = ();
 
     fn handle(&mut self, msg: ClientMessage, _: &mut Context<Self>) {
-        self.send_message(msg.room, msg.msg.as_str(), msg.id);
+        self.send_message(msg.room, msg.msg.as_str());
     }
 }
 

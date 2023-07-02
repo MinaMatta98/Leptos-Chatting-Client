@@ -1,5 +1,5 @@
 # WIP Leptos-Chatting-Client
-This repository demonstrates the use of the following technologies:
+This repository demonstrates the use of the following crates:
 * [Actix-web](https://actix.rs/): Actix based backend for request management.
 * [Leptos-RS](https://github.com/leptos-rs/leptos): Server Side Rendering and Hydration framework utilizing web-assembly.
 * [Cargo-Leptos](https://github.com/leptos-rs/cargo-leptos): Project Building Managed via Cargo Leptos.
@@ -9,6 +9,9 @@ This repository demonstrates the use of the following technologies:
 * [Tailwind-Css](https://tailwindcss.com/): Styles on the go.
 * [Redis](https://redis.io/): User Session Management via Redis value stores.
 * [Askama](https://github.com/djc/askama): Templating Engine for automating verification and sign-up emails.
+* [Gloo-Net](https://github.com/rustwasm/gloo): Libraries for simple control over wasm functions. Used for serialization and initiating web-socket connections. 
+* [Actix-Web-Actors](https://github.com/actix/actix-web/tree/master/actix-web-actors): Web-Socket real time reactivity and chat updates, mimicking [pusher](https://pusher.com/) functionality.
+* [Async-Broadcast](https://github.com/smol-rs/async-broadcast): Broadcast channels for web-socket stream handling and cross-platform access to a single connection, where 
 
 ## Features
 * User Authentication and Verification
@@ -52,6 +55,4 @@ A burner email is used for the verification process for demonstrative purposes.
 ## Coming Soon
 The following features will be implemented soon:
 
-* Introduction of Web-Socket for real time reactivity via [Actix-Actors](https://actix.rs/docs/websockets/). This will involve a manual implementation of [pusher](https://pusher.com/) functionality.
-* Client Side Reactivity via [leptos-server-signal](https://github.com/tqwewe/leptos_server_signal).
 * Improvements to the sign-up and login user interface.
