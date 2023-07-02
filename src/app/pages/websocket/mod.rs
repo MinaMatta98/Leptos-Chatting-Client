@@ -3,7 +3,8 @@ use futures_util::{SinkExt, StreamExt};
 use gloo_net::websocket::futures::WebSocket;
 use leptos::html::Input;
 use leptos::{
-    spawn_local, use_context, NodeRef, RwSignal, Scope, SignalGet, SignalGetUntracked, SignalUpdate,
+    log, spawn_local, use_context, NodeRef, RwSignal, Scope, SignalGet, SignalGetUntracked,
+    SignalUpdate,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -45,8 +46,7 @@ impl HandleWebSocket {
                 )
             }
         };
-
-        let _ = SINKVEC::sync_stream(id, data).0.broadcast(message).await;
+        let _ = SINKVEC::sync_stream(id, data).send(message).await;
     }
 
     pub async fn handle_split_stream<'a, T, E>(
@@ -54,7 +54,7 @@ impl HandleWebSocket {
         id: i32,
         messages: Option<RwSignal<T>>,
         url: &str,
-        function: impl Fn(Option<&mut T>, E) + 'static,
+        function: impl Fn(Option<&mut T>, E) + 'static + Clone,
     ) where
         E: for<'de> Deserialize<'de> + std::any::Any + std::fmt::Debug, // Add this line
         T: std::fmt::Debug,
@@ -64,83 +64,59 @@ impl HandleWebSocket {
             _ => WsData::MessageData,
         };
 
-        let (tx, mut rx, state) = STREAMVEC::sync_stream(id, data);
-        let (_, mut rx_sink) = SINKVEC::sync_stream(id, data);
-
+        let (mut sync_channel, state) = STREAMVEC::sync_stream(id, data);
+        let function_clone = function.clone();
+        let mut sync_clone = sync_channel.clone();
+        let mut rx_sink = SINKVEC::sync_stream(id, data);
         let messages = move || messages;
-        match state {
-            avatar::WebSocketState::NewConnection => {
-                let (mut sink, mut ws_read) = Self::handle_websocket(url, id);
-                spawn_local(async move {
-                    while let Some(message) = rx_sink.next().await {
-                        sink.send(gloo_net::websocket::Message::Text(
-                            serde_json::to_string(&message.into_inner()).unwrap(),
-                        ))
-                        .await
-                        .unwrap();
-                    }
-                    leptos::on_cleanup(cx, move || {
-                        spawn_local(async move {
-                            STREAMVEC
-                                .write()
-                                .retain(|(_, stream_id), _| id != *stream_id);
-                            SINKVEC.write().retain(|(_, sink_id), _| id != *sink_id);
-                            sink.close().await.unwrap();
-                        })
-                    });
-                });
 
-                spawn_local(async move {
-                    while let Some(value) = ws_read.next().await {
-                        let result = match value {
-                            Ok(gloo_net::websocket::Message::Text(text)) => {
-                                let _ = tx
-                                    .broadcast(
-                                        std::string::String::from_inner(text.trim()).unwrap(),
-                                    )
-                                    .await;
-                                Some(serde_json::from_str(&text))
-                            }
-                            Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
-                                let text = String::from_utf8(bytes).unwrap();
-                                Some(serde_json::from_str(&text))
-                            }
-                            _ => None,
-                        };
+        spawn_local(async move {
+            sync_clone.rebound_stream(messages, function_clone).await;
+        });
 
-                        if let Some(Ok(value)) = result {
-                            let value: E = value;
-                            match messages() {
-                                Some(messages) => messages.update(|signal_inner| {
-                                    function(Some(signal_inner), value);
-                                }),
-                                None => function(None, value),
-                            }
-                        }
-                    }
+        if let avatar::WebSocketState::NewConnection = state {
+            let (mut sink, mut ws_read) = Self::handle_websocket(url, id);
+            spawn_local(async move {
+                rx_sink.rebound_sink(&mut sink).await;
+                leptos::on_cleanup(cx, move || {
+                    spawn_local(async move {
+                        STREAMVEC
+                            .write()
+                            .retain(|(_, stream_id), _| id != *stream_id);
+                        SINKVEC.write().retain(|(_, sink_id), _| id != *sink_id);
+                        sink.close().await.unwrap();
+                    })
                 });
-            }
-            avatar::WebSocketState::PassThrough => spawn_local(async move {
-                while let Some(data) = rx.next().await {
-                    let mut value: E;
-                    match std::any::TypeId::of::<E>() {
-                        t if t == std::any::TypeId::of::<avatar::IconData>() => {
-                            value = serde_json::from_value(data.into_inner()).unwrap();
-                            value = *Box::<dyn Any>::downcast::<E>(Box::new(value)).unwrap();
+            });
+
+            spawn_local(async move {
+                while let Some(value) = ws_read.next().await {
+                    let result = match value {
+                        Ok(gloo_net::websocket::Message::Text(text)) => {
+                            let _ = sync_channel
+                                .send(std::string::String::from_inner(text.trim()).unwrap())
+                                .await;
+                            Some(serde_json::from_str(&text))
                         }
-                        _ => {
-                            value = serde_json::from_value(data.into_inner()).unwrap();
-                            value = *Box::<dyn Any>::downcast::<E>(Box::new(value)).unwrap();
+                        Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
+                            log!("BYTES?");
+                            let text = String::from_utf8(bytes).unwrap();
+                            Some(serde_json::from_str(&text))
                         }
-                    }
-                    match messages() {
-                        Some(messages) => messages.update(|signal_inner| {
-                            function(Some(signal_inner), value);
-                        }),
-                        None => function(None, value),
+                        _ => None,
+                    };
+
+                    if let Some(Ok(value)) = result {
+                        let value: E = value;
+                        match messages() {
+                            Some(messages) => messages.update(|signal_inner| {
+                                function(Some(signal_inner), value);
+                            }),
+                            None => function(None, value),
+                        }
                     }
                 }
-            }),
+            });
         }
     }
 }
@@ -154,11 +130,11 @@ impl UserInputHandler {
         input_ref: NodeRef<Input>,
         id: i32,
     ) {
-        let body = input_ref.get().unwrap().value();
+        let body = input_ref.get_untracked().unwrap().value();
         let user_context = use_context::<UserContext>(cx).unwrap();
         let seen_context = move || use_context::<SeenContext>(cx).unwrap().status.get();
 
-        if let Some(files) = image_ref.get().unwrap().files() {
+        if let Some(files) = image_ref.get_untracked().unwrap().files() {
             let list = gloo_file::FileList::from(files);
             if let Some(file) = list.first() {
                 let file = Some(gloo_file::futures::read_as_bytes(file).await.unwrap());
@@ -184,7 +160,6 @@ impl UserInputHandler {
                             },
                         },
                         id,
-                        // "ws://localhost:8000/ws/",
                     )
                     .await;
                 }
@@ -210,7 +185,6 @@ impl UserInputHandler {
                         },
                     },
                     id,
-                    // "ws://localhost:8000/ws/",
                 )
                 .await
             }

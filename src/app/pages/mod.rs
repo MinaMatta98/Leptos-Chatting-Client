@@ -1,4 +1,8 @@
+use std::borrow::Cow;
+
 use base64::{engine::general_purpose, Engine as _};
+use chrono::SubsecRound;
+use fancy_regex::Regex;
 
 use super::{DrawerContext, MessageDrawerContext, SeenContext, SeenContextInner, SideBarContext};
 use crate::{
@@ -6,8 +10,8 @@ use crate::{
     server_function::{
         self, associated_conversation, conversation_action, find_image, get_conversations,
         get_image, get_users, handle_seen, login_status, validate_conversation, view_messages,
-        ConversationMeta, ImageAvailability, MergedConversation, MergedMessages, UserLogin,
-        UserModel,
+        ConversationMeta, ImageAvailability, MergedConversation, MergedMessages, SeenMessageFacing,
+        UserLogin, UserModel,
     },
 };
 use leptos::{
@@ -361,7 +365,6 @@ fn DesktopItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
 
 #[component]
 fn UserList(cx: Scope) -> impl IntoView {
-    let status = create_resource(cx, || (), move |_| async move { login_status(cx).await });
     view! {cx,
         <aside class="fixed inset-y-0 pb-20 lg:pb-0 lg:left-20 lg:w-80 lg:block overflow-y-auto border-r border-gray-200 block w-full left-0">
             <div class="px-5">
@@ -549,6 +552,22 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
             .eq(&cloned_item.conversation_id.to_string())
     };
 
+    spawn_local(async move {
+        HandleWebSocket::handle_split_stream::<String, Message>(
+            cx,
+            item.conversation_id,
+            Some(message_signal),
+            "ws://localhost:8000/ws/",
+            |signal, value: Message| {
+                match value.image {
+                    Some(_) => *signal.unwrap() = String::from("Image Sent in Chat"),
+                    None => *signal.unwrap() = value.message.unwrap(),
+                };
+            },
+        )
+        .await
+    });
+
     view! {cx,
         <A href=format!("{}", &cloned_item.conversation_id.to_string())
                 class=move || format!("w-full relative flex items-center space-x-3 hover:bg-neutral-100 rounded-lg transition cursor-pointer p-3 {}",
@@ -572,56 +591,14 @@ fn ConversationBox(cx: Scope, item: MergedConversation) -> impl IntoView {
                                     true => secondary_cloned_item.conversation.name.unwrap(),
                                     false => secondary_cloned_item.conversation.first_name + " " + &secondary_cloned_item.conversation.last_name
                                 }
-
                             }
                         </p>
                         <p>
-
                         </p>
                     </div>
                 <p class=move || format!("text-sm {}", if seen_status.get()
                         {"text-gray-500"} else {"text-black font-medium"})>
                                 {move || message_signal}
-                                // {move ||
-                                // spawn_local(async move {
-                                    // websocket::HandleWebSocket::render_stream_to_signal(
-                                    //     cx,
-                                    //     message_signal,
-                                    //     item.conversation_id,
-                                    //     |text| {
-                                    //         (
-                                    //             if serde_json::from_str::<Message>(&text)
-                                    //                 .unwrap()
-                                    //                 .image
-                                    //                 .is_some()
-                                    //             {
-                                    //                 String::from("Image Sent in Chat")
-                                    //             } else {
-                                    //                 serde_json::from_str::<Message>(&text)
-                                    //                     .unwrap()
-                                    //                     .message
-                                    //                     .unwrap()
-                                    //             },
-                                    //             String::from("Image sent in chat"),
-                                    //         )
-                                    //     },
-                                    // )
-                                    // .await
-                                         // HandleWebSocket::handle_split_stream(
-                                         //     cx,
-                                         //     item.conversation_id,
-                                         //     Some(message_signal),
-                                         //     "ws://localhost:8000/ws/",
-                                         //     |signal, value: Message| {
-                                         //            match value.image {
-                                         //                Some(_) => *signal.unwrap() = String::from("Image Sent in Chat"),
-                                         //                None => *signal.unwrap() = value.message.unwrap()
-                                         //        };
-                                         //    }
-                                         // )
-                                         // .await
-                                // })
-                // }
                 </p>
                 </div>
             </div>
@@ -746,13 +723,16 @@ fn Header(cx: Scope, conversation: Vec<ConversationMeta>) -> impl IntoView {
 
 #[component]
 fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
-    // let messages_signal = create_rw_signal(cx, Vec::new());
+    let messages_signal = create_rw_signal(cx, Vec::new());
 
     let seen_context = use_context::<SeenContext>(cx).unwrap().status;
+    let id = get_current_id(cx)();
 
     let boxed_messages = Box::new(messages);
+
     let messages = boxed_messages.clone();
-    let last = Box::new(move || {
+
+    let last = move || {
         if let Some(index) = seen_context
             .get()
             .iter()
@@ -763,47 +743,53 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
             let last_message = boxed_messages.clone().iter().last().unwrap().message_id;
             seen_context.update(|seen_vec| {
                 seen_vec.push(SeenContextInner {
-                    conversation_id: get_current_id(cx)(),
+                    conversation_id: id,
                     last_message_id: last_message,
                 })
             });
             last_message
         }
-    });
-    let last_clone = last.clone();
+    };
 
-    // spawn_local(async move {
-    //     HandleWebSocket::handle_split_stream(
-    //         cx,
-    //         get_current_id(cx)(),
-    //         Some(messages_signal),
-    //         "ws://localhost:8000/ws/",
-    //         |message_vec, value: Message| {
-    //             message_vec.unwrap().push(MergedMessages {
-    //                 first_name: value.first_name.clone(),
-    //                 last_name: value.last_name.clone(),
-    //                 created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
-    //                 message_sender_id: value.user_id,
-    //                 message_body: value.message.clone(),
-    //                 message_image: value.image,
-    //                 message_conversation_id: value.conversation_id,
-    //                 seen_status: value
-    //                     .seen
-    //                     .unwrap()
-    //                     .iter()
-    //                     .map(|(first_name, last_name)| SeenMessageFacing {
-    //                         seen_id: Some(value.user_id),
-    //                         message_id: None,
-    //                         first_name: Some(first_name.to_string()),
-    //                         last_name: Some(last_name.to_string()),
-    //                     })
-    //                     .collect(),
-    //                 message_id: last() + 1,
-    //             })
-    //         },
-    //     )
-    //     .await;
-    // });
+    let last_clone = last.clone();
+    spawn_local(async move {
+        HandleWebSocket::handle_split_stream::<Vec<MergedMessages>, Message>(
+            cx,
+            get_current_id(cx)(),
+            Some(messages_signal),
+            "ws://localhost:8000/ws/",
+            move |message_vec, value: Message| {
+                seen_context.update(|last| {
+                    last.iter_mut()
+                        .find(|context| context.conversation_id == id)
+                        .map(|context| context.last_message_id += 1)
+                        .unwrap()
+                });
+                message_vec.unwrap().push(MergedMessages {
+                    first_name: value.first_name.clone(),
+                    last_name: value.last_name.clone(),
+                    created_at: chrono::Utc::now().trunc_subsecs(0).to_string(),
+                    message_sender_id: value.user_id,
+                    message_body: value.message.clone(),
+                    message_image: value.image,
+                    message_conversation_id: value.conversation_id,
+                    seen_status: value
+                        .seen
+                        .unwrap()
+                        .iter()
+                        .map(|(first_name, last_name)| SeenMessageFacing {
+                            seen_id: Some(value.user_id),
+                            message_id: None,
+                            first_name: Some(first_name.to_string()),
+                            last_name: Some(last_name.to_string()),
+                        })
+                        .collect(),
+                    message_id: last() + 1,
+                })
+            },
+        )
+        .await;
+    });
 
     view! {cx,
             <div class="flex-1 overflow-y-auto ">
@@ -811,23 +797,25 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
                       each=move || *messages.clone()
                       key=|val| val.message_id
                       view=move |cx, item: MergedMessages| {
-                             view! { cx,
-                                <MessageBox message=item.clone() is_last=(last_clone() == item.message_id)/>
-                             }
+                      view! { cx,
+                         <MessageBox message=item.clone()
+                              is_last=(last_clone() == item.message_id)
+                          />
+                      }
                 }/>
-                    // { move ||
-                    //     messages_signal.get().iter().map(|item|
-                    //         view! {cx,
-                    //             <MessageBox message=item.clone() is_last=(
-                    //                 if let Some(message) = messages_signal.get().last() {
-                    //                     log!("{}", message.message_id);
-                    //                     message.message_id == item.message_id
-                    //                 } else {
-                    //                     false
-                    //                 })/>
-                    //         }
-                    //     ).collect_view(cx)
-                    // }
+                    {move ||
+                        messages_signal.get().iter().map(|item|
+                            view! {cx,
+                                <MessageBox message=item.clone() is_last=(
+                                    if let Some(messages) = messages_signal.get().last() {
+                                        messages.message_id == item.message_id
+                                    } else {
+                                        false
+                                    }
+                                )/>
+                            }
+                        ).collect_view(cx)
+                    }
              <div id="bottom_ref" class="pt-24"/>
         </div>
     }
@@ -838,15 +826,15 @@ fn MessageForm(cx: Scope) -> impl IntoView {
     let _input_ref = create_node_ref::<html::Input>(cx);
     let image_ref = create_node_ref::<html::Input>(cx);
 
-    let scroll = move || {
-        if let Some(element) = web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| doc.get_element_by_id("bottom_ref"))
-            .and_then(|elem| elem.dyn_into::<Element>().ok())
-        {
-            element.scroll_into_view();
-        }
-    };
+    // let scroll = move || {
+    //     if let Some(element) = web_sys::window()
+    //         .and_then(|win| win.document())
+    //         .and_then(|doc| doc.get_element_by_id("bottom_ref"))
+    //         .and_then(|elem| elem.dyn_into::<Element>().ok())
+    //     {
+    //         element.scroll_into_view();
+    //     }
+    // };
 
     let on_submit_callback = move |event: SubmitEvent| {
         event.prevent_default();
@@ -854,9 +842,9 @@ fn MessageForm(cx: Scope) -> impl IntoView {
 
         spawn_local(async move {
             UserInputHandler::handle_message(cx, image_ref, _input_ref, get_current_id(cx)()).await;
-            image_ref.get().unwrap().set_value("");
-            _input_ref.get().unwrap().set_value("");
-            scroll()
+            image_ref.get_untracked().unwrap().set_value("");
+            _input_ref.get_untracked().unwrap().set_value("");
+            // scroll()
         });
     };
 
@@ -874,7 +862,7 @@ fn MessageForm(cx: Scope) -> impl IntoView {
                  <Icon icon=HiIcon::HiPaperAirplaneOutlineLg width="18px" class="text-white" style="stroke: white; fill: white"/>
              </button>
          </form>
-            {scroll()}
+            // {scroll()}
     }
 }
 
@@ -882,7 +870,7 @@ fn MessageForm(cx: Scope) -> impl IntoView {
 fn MessageInput(cx: Scope, _input_ref: NodeRef<html::Input>) -> impl IntoView {
     view! {cx,
         <div class="relative w-full">
-            <input required=false placeholder="Write a message..." _ref=_input_ref
+            <input required=false placeholder="Write a message..." node_ref=_input_ref
               class="text-black font-light py-2 px-4 bg-neutral-100 w-full rounded-full focus:outline-none">
             </input>
         </div>
@@ -895,12 +883,23 @@ fn MessageBox(cx: Scope, message: MergedMessages, is_last: bool) -> impl IntoVie
         move || use_context::<UserContext>(cx).unwrap().id.get() == message.message_sender_id;
 
     let image_modal_context = create_rw_signal(cx, false);
-    let seen_list: String = message
+    log!("{:?}", message.seen_status);
+    let regex = Regex::new(&format!(
+        r"^(.*?){}(.*?){}(.*)$",
+        message.first_name, message.last_name
+    ))
+    .unwrap();
+
+    let seen_list: Cow<str> = message
         .seen_status
         .into_iter()
-        .filter(|users| users.seen_id != Some(message.message_sender_id))
         .map(|messages| messages.first_name.unwrap() + " " + &messages.last_name.unwrap() + " ")
         .collect();
+
+    let seen_list = match seen_list {
+        Cow::Borrowed(s) => regex.replace(s, "$1$3").into_owned(),
+        Cow::Owned(s) => regex.replace(&s, "$1$3").into_owned(),
+    };
 
     let message_image = message.message_image.clone();
     let image_status = create_resource(
@@ -1031,7 +1030,7 @@ fn MessageBox(cx: Scope, message: MergedMessages, is_last: bool) -> impl IntoVie
                         }
                 </div>
                 {move || {
-                    (is_last && is_own() && seen_list.len().gt(&0)).then(||
+                    (is_last && is_own() && seen_list.trim().len().gt(&0)).then(||
                     view!{cx,
                         <div class="text-xs font-light text-gray-500">
                             {format!("Seen by {}", seen_list)}

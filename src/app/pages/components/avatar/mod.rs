@@ -1,17 +1,21 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
+use crate::app::pages::HandleWebSocket;
+use crate::app::pages::{loading_fallback, Message};
+use crate::server_function::get_icon;
 use async_broadcast::{Receiver, Sender};
+use async_channel::{Receiver as AsyncReceiver, Sender as AsyncSender};
 use base64::engine::general_purpose;
 use base64::Engine;
+use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
+use gloo_net::websocket::futures::WebSocket;
 use lazy_static::lazy_static;
 use leptos::*;
 use leptos_icons::*;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-
-use crate::app::pages::HandleWebSocket;
-use crate::app::pages::{loading_fallback, Message};
-use crate::server_function::get_icon;
+use serde::Deserialize;
+use std::any::Any;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 lazy_static! {
     #[derive(Debug)]
@@ -23,8 +27,7 @@ lazy_static! {
     pub static ref IMAGEVEC: Arc<parking_lot::RwLock<Vec<UserImage>>> = Arc::new(parking_lot::RwLock::new(Vec::new()));
 }
 
-pub type WsVecType =
-    Arc<parking_lot::RwLock<HashMap<(WsData, i32), (Sender<StreamData>, Receiver<StreamData>)>>>;
+pub type WsVecType = Arc<parking_lot::RwLock<HashMap<(WsData, i32), SyncChannel>>>;
 
 lazy_static! {
     #[derive(Debug)]
@@ -46,6 +49,67 @@ pub enum WebSocketState {
 }
 
 #[derive(Debug, Clone)]
+pub enum SyncChannel {
+    BroadCast(Sender<StreamData>, Receiver<StreamData>),
+    Mpsc(Sender<StreamData>, Receiver<StreamData>),
+}
+
+impl SyncChannel {
+    pub async fn send(&mut self, message: StreamData) {
+        match self {
+            SyncChannel::BroadCast(tx, _) => {
+                let _ = tx.broadcast(message).await.unwrap();
+            }
+            SyncChannel::Mpsc(tx, _) => {
+                tx.broadcast(message)
+                    .await
+                    .expect("Failed to Send Message to Other Threads");
+            }
+        }
+    }
+
+    pub async fn next(&mut self) -> Option<StreamData> {
+        match self {
+            SyncChannel::BroadCast(_, ref mut rx) => rx.next().await,
+            SyncChannel::Mpsc(_, ref mut rx) => rx.next().await,
+        }
+    }
+
+    pub async fn rebound_sink(
+        &mut self,
+        sink: &mut SplitSink<WebSocket, gloo_net::websocket::Message>,
+    ) {
+        while let Some(message) = self.next().await {
+            sink.send(gloo_net::websocket::Message::Text(
+                serde_json::to_string(&message.into_inner()).unwrap(),
+            ))
+            .await
+            .unwrap();
+        }
+    }
+
+    pub async fn rebound_stream<E, T: 'static>(
+        &mut self,
+        messages: impl Fn() -> Option<RwSignal<T>>,
+        function: impl Fn(Option<&mut T>, E) + 'static,
+    ) where
+        E: for<'de> Deserialize<'de> + std::any::Any + std::fmt::Debug, // Add this line
+    {
+        while let Some(data) = self.next().await {
+            let mut value: E;
+            value = serde_json::from_value(data.into_inner()).unwrap();
+            value = *Box::<dyn Any>::downcast::<E>(Box::new(value)).unwrap();
+            match messages() {
+                Some(messages) => messages.update(|signal_inner| {
+                    function(Some(signal_inner), value);
+                }),
+                None => function(None, value),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum StreamData {
     Message(Message),
     IconData(IconData),
@@ -59,7 +123,7 @@ pub enum WsData {
 
 impl ToStreamData for String {
     fn from_inner(inner: &str) -> Result<StreamData, std::io::Error> {
-        let value: serde_json::Value = serde_json::from_str(inner.trim()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(inner.trim())?;
         if let Ok(message) = serde_json::from_value::<Message>(value.clone()) {
             return Ok(StreamData::Message(message));
         }
@@ -84,61 +148,70 @@ impl StreamData {
     }
 }
 
-fn push_to_map<'a, F>(
-    accessor: F,
-    id: i32,
-    data: WsData,
-    rx: Receiver<StreamData>,
-    tx: Sender<StreamData>,
-) where
-    F: FnOnce() -> RwLockWriteGuard<
-        'a,
-        HashMap<(WsData, i32), (Sender<StreamData>, Receiver<StreamData>)>,
-    >,
+fn push_to_map<'a, F>(accessor: F, id: i32, data: WsData, channel: SyncChannel)
+where
+    F: FnOnce() -> RwLockWriteGuard<'a, HashMap<(WsData, i32), SyncChannel>>,
 {
     let mut glob_vec = accessor();
-    glob_vec.insert((data, id), (tx, rx));
+    glob_vec.insert((data, id), channel);
 }
 
-fn retrieve_from_map<'a, F>(
-    accessor: F,
-    data: WsData,
-    id: i32,
-) -> Option<(Sender<StreamData>, Receiver<StreamData>)>
+fn retrieve_from_map<'a, F>(accessor: F, data: WsData, id: i32) -> Option<SyncChannel>
 where
-    F: FnOnce() -> RwLockReadGuard<
-        'a,
-        HashMap<(WsData, i32), (Sender<StreamData>, Receiver<StreamData>)>,
-    >,
+    F: FnOnce() -> RwLockReadGuard<'a, HashMap<(WsData, i32), SyncChannel>>,
 {
     let glob_vec = accessor();
     glob_vec.get(&(data, id)).cloned()
 }
 
 impl SINKVEC {
-    pub fn sync_stream(id: i32, data: WsData) -> (Sender<StreamData>, Receiver<StreamData>) {
+    pub fn sync_stream(id: i32, data: WsData) -> SyncChannel {
         match retrieve_from_map(|| SINKVEC.read(), data, id) {
-            Some((tx, rx)) => (tx, rx.new_receiver()),
+            Some(dual_channel) => match dual_channel {
+                SyncChannel::BroadCast(tx, rx) => SyncChannel::BroadCast(tx, rx.new_receiver()),
+                SyncChannel::Mpsc(tx, rx) => SyncChannel::Mpsc(tx, rx),
+            },
             None => {
-                let (tx, rx) = async_broadcast::broadcast::<StreamData>(100000);
-                push_to_map(|| SINKVEC.write(), id, data, rx.clone(), tx.clone());
-                (tx, rx)
+                let channel = match data {
+                    WsData::IconData => {
+                        let (tx, rx) = async_broadcast::broadcast::<StreamData>(100000);
+                        SyncChannel::BroadCast(tx, rx)
+                    }
+                    WsData::MessageData => {
+                        let (tx, rx) = async_broadcast::broadcast::<StreamData>(100000);
+                        SyncChannel::Mpsc(tx, rx)
+                    }
+                };
+                push_to_map(|| SINKVEC.write(), id, data, channel.clone());
+                channel
             }
         }
     }
 }
 
 impl STREAMVEC {
-    pub fn sync_stream(
-        id: i32,
-        data: WsData,
-    ) -> (Sender<StreamData>, Receiver<StreamData>, WebSocketState) {
+    pub fn sync_stream(id: i32, data: WsData) -> (SyncChannel, WebSocketState) {
         match retrieve_from_map(|| STREAMVEC.read(), data, id) {
-            Some((tx, rx)) => (tx, rx.new_receiver(), WebSocketState::PassThrough),
+            Some(dual_channel) => {
+                let channel = match dual_channel {
+                    SyncChannel::BroadCast(tx, rx) => SyncChannel::BroadCast(tx, rx.new_receiver()),
+                    SyncChannel::Mpsc(..) => dual_channel,
+                };
+                (channel, WebSocketState::PassThrough)
+            }
             None => {
-                let (tx, rx) = async_broadcast::broadcast::<StreamData>(1000000);
-                push_to_map(|| STREAMVEC.write(), id, data, rx.clone(), tx.clone());
-                (tx, rx, WebSocketState::NewConnection)
+                let channel = match data {
+                    WsData::IconData => {
+                        let (tx, rx) = async_broadcast::broadcast::<StreamData>(100000);
+                        SyncChannel::BroadCast(tx, rx)
+                    }
+                    WsData::MessageData => {
+                        let (tx, rx) = async_broadcast::broadcast::<StreamData>(100000);
+                        SyncChannel::Mpsc(tx, rx)
+                    }
+                };
+                push_to_map(|| STREAMVEC.write(), id, data, channel.clone());
+                (channel, WebSocketState::NewConnection)
             }
         }
     }
