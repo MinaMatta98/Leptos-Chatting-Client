@@ -244,10 +244,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsChatSession {
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
-                let mut text: crate::app::pages::Message =
+                let mut text: crate::app::pages::conversation::Message =
                     serde_json::from_str(&String::from_utf8(text.into_bytes().to_vec()).unwrap())
                         .unwrap();
-                let crate::app::pages::Message {
+                let crate::app::pages::conversation::Message {
                     last_name,
                     user_id,
                     first_name,

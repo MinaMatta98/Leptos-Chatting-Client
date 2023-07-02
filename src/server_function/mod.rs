@@ -1,3 +1,4 @@
+#[cfg(feature = "ssr")]
 use iter_tools::Itertools;
 use leptos::*;
 use serde::{Deserialize, Serialize};

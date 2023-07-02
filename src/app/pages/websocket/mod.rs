@@ -1,3 +1,4 @@
+use async_broadcast::{Receiver, Sender};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use gloo_net::websocket::futures::WebSocket;
@@ -9,13 +10,111 @@ use leptos::{
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 
-use crate::app::SeenContext;
 use crate::server_function::handle_message_input;
+use super::components::avatar::{self, IconData, SINKVEC, STREAMVEC};
+use super::UserContext;
+use super::conversation::Message;
+use crate::app::{pages::components::avatar::ToStreamData, SeenContext};
 
-use super::components::avatar::{self, StreamData, WsData, SINKVEC, STREAMVEC};
-use super::{Message, UserContext};
-use crate::app::pages::components::avatar::ToStreamData;
+#[derive(Debug, Clone)]
+pub enum SyncChannel {
+    BroadCast(Sender<StreamData>, Receiver<StreamData>),
+    Mpsc(Sender<StreamData>, Receiver<StreamData>),
+}
 
+impl SyncChannel {
+    pub async fn send(&mut self, message: StreamData) {
+        match self {
+            SyncChannel::BroadCast(tx, _) => {
+                let _ = tx.broadcast(message).await.unwrap();
+            }
+            SyncChannel::Mpsc(tx, _) => {
+                tx.broadcast(message)
+                    .await
+                    .expect("Failed to Send Message to Other Threads");
+            }
+        }
+    }
+
+    pub async fn next(&mut self) -> Option<StreamData> {
+        match self {
+            SyncChannel::BroadCast(_, ref mut rx) => rx.next().await,
+            SyncChannel::Mpsc(_, ref mut rx) => rx.next().await,
+        }
+    }
+
+    pub async fn rebound_sink(
+        &mut self,
+        sink: &mut SplitSink<WebSocket, gloo_net::websocket::Message>,
+    ) {
+        while let Some(message) = self.next().await {
+            sink.send(gloo_net::websocket::Message::Text(
+                serde_json::to_string(&message.into_inner()).unwrap(),
+            ))
+            .await
+            .unwrap();
+        }
+    }
+
+    pub async fn rebound_stream<E, T: 'static>(
+        &mut self,
+        messages: impl Fn() -> Option<RwSignal<T>>,
+        function: impl Fn(Option<&mut T>, E) + 'static,
+    ) where
+        E: for<'de> Deserialize<'de> + std::any::Any + std::fmt::Debug, // Add this line
+    {
+        while let Some(data) = self.next().await {
+            let mut value: E;
+            value = serde_json::from_value(data.into_inner()).unwrap();
+            value = *Box::<dyn Any>::downcast::<E>(Box::new(value)).unwrap();
+            match messages() {
+                Some(messages) => messages.update(|signal_inner| {
+                    function(Some(signal_inner), value);
+                }),
+                None => function(None, value),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum StreamData {
+    Message(Message),
+    IconData(IconData),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum WsData {
+    IconData,
+    MessageData,
+}
+
+impl ToStreamData for String {
+    fn from_inner(inner: &str) -> Result<StreamData, std::io::Error> {
+        let value: serde_json::Value = serde_json::from_str(inner.trim())?;
+        if let Ok(message) = serde_json::from_value::<Message>(value.clone()) {
+            return Ok(StreamData::Message(message));
+        }
+        if let Ok(icon_data) = serde_json::from_value::<IconData>(value) {
+            Ok(StreamData::IconData(icon_data))
+        } else {
+            log!("Error with stream text: {}", inner);
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid Data",
+            ))
+        }
+    }
+}
+
+impl StreamData {
+    pub fn into_inner(self) -> serde_json::Value {
+        match self {
+            Self::Message(message) => serde_json::to_value(message).unwrap(),
+            Self::IconData(icon_data) => serde_json::to_value(icon_data).unwrap(),
+        }
+    }
+}
 pub struct HandleWebSocket;
 
 impl HandleWebSocket {

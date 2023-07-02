@@ -1,7 +1,13 @@
+cfg_if::cfg_if! {
+if #[cfg(feature = "ssr")] {
 use crate::migrator;
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, Statement};
-use sea_orm_migration::prelude::*;
+use sea_orm::{ConnectionTrait, Database, DbBackend, DbErr, Statement};
 use std::io::BufRead;
+}
+}
+
+use sea_orm::DatabaseConnection;
+use sea_orm_migration::prelude::*;
 
 #[derive(Debug)]
 pub struct DbConnection {

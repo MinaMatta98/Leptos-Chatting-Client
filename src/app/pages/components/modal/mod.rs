@@ -1,17 +1,21 @@
 use base64::engine::general_purpose;
 use base64::Engine;
-use leptos::html::Input;
+use leptos::html::{Div, Input};
 use leptos::{prelude::*, *};
 use leptos_icons::*;
 use leptos_router::{use_navigate, ActionForm};
 use web_sys::MouseEvent;
 
-use crate::app::pages::components::avatar::base_64_encode_uri;
-use crate::app::pages::websocket::HandleWebSocket;
-use crate::app::pages::{get_current_id, Button, ButtonVal, Select, UserContext, UserInput};
-use crate::app::{DrawerContext, MessageDrawerContext};
+use crate::app::pages::components::anciliary::{loading_fallback, Button, ButtonVal, UserInput};
+use crate::app::pages::conversation::get_current_id;
+use crate::app::{
+    pages::{components::avatar::base_64_encode_uri, websocket::HandleWebSocket, UserContext},
+    DrawerContext, MessageDrawerContext,
+};
+
 use crate::server_function::{
-    delete_conversations, login_status, upload_user_info, CreateGroupConversation,
+    delete_conversations, get_users, login_status, upload_user_info, CreateGroupConversation,
+    UserModel,
 };
 
 use super::avatar::{self, *};
@@ -72,7 +76,7 @@ pub fn GroupChatModal(cx: Scope, context: RwSignal<bool>) -> impl IntoView {
                             {move || err_result_signal}
                         </p>
                         <div class="mt-10 flex flex-col gap-y-8">
-                            <UserInput id="name" label="Group Name" input_type="text" required=true disabled=ButtonVal::RwSignal(disable_signal) placeholder=String::from("Group Name...") node_ref=name_ref/>
+                            <UserInput id="name" label="Group Name" input_type="text" required=true disabled=ButtonVal::RwSignal(disable_signal) placeholder=String::from("Group Name...") _node_ref=name_ref/>
                             <input name="is_group" value="true" class="hidden"/>
                             <Select disabled=disable_signal label="Members" input_ref=input_ref input_signal/>
                         </div>
@@ -191,9 +195,7 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                     let base64_encoded_image =
                         general_purpose::STANDARD_NO_PAD.encode(*file.clone());
                     let data_uri = base_64_encode_uri(base64_encoded_image);
-                    let id = if let 0 =
-                        (move || use_context::<UserContext>(cx).unwrap().id.get_untracked())()
-                    {
+                    let id = if let 0 = use_context::<UserContext>(cx).unwrap().id.get_untracked() {
                         login_status(cx).await.unwrap().id
                     } else {
                         use_context::<UserContext>(cx).unwrap().id.get_untracked()
@@ -233,13 +235,12 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                         <Suspense fallback=||()>
                         {move || status.read(cx).map(|user| {
                             let user = user.unwrap();
-                            // let fetched_image = ICONVEC::fetch_image(user.id, cx);
                             view!{cx,
                                 <div class="mt-10 flex flex-col gap-y-8">
-                                    <UserInput id="first_name" node_ref=first_name_ref input_type="text" label="First Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.first_name/>
+                                    <UserInput id="first_name" _node_ref=first_name_ref input_type="text" label="First Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.first_name/>
                                 </div>
                                 <div class="mt-10 flex flex-col gap-y-8">
-                                    <UserInput id="last_name" node_ref=last_name_ref input_type="text" label="Last Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.last_name/>
+                                    <UserInput id="last_name" _node_ref=last_name_ref input_type="text" label="Last Name" required=false disabled=ButtonVal::RwSignal(disable_signal) placeholder=user.last_name/>
                                 </div>
                                 <div class="mt-10 flex flex-col gap-y-3">
                                     <label class="block text-sm font-medium leading-6 text-gray-900">
@@ -268,5 +269,107 @@ pub fn SettingsModal(cx: Scope, settings_modal_setter: RwSignal<bool>) -> impl I
                 </div>
             </form>
         </Modal>
+    }
+}
+
+#[component]
+fn Select(
+    cx: Scope,
+    disabled: RwSignal<bool>,
+    label: &'static str,
+    input_ref: NodeRef<Input>,
+    input_signal: RwSignal<Vec<(HtmlElement<Div>, i32)>>,
+) -> impl IntoView {
+    let hidden_state = create_rw_signal(cx, true);
+
+    let users = create_local_resource(
+        cx,
+        move || hidden_state.get(),
+        move |_| async move { get_users(cx).await },
+    );
+    view! {cx,
+        <div class="z-[100]">
+            <label class="block text-sm font-medium leading-6 text-gray-900">
+                {label}
+            </label>
+            <div class="mt-2 relative">
+              <input type="text" class=move || format!("w-full py-2 px-4 border border-gray-300 rounded-md
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                text-transparent select-none selection:bg-none {}", if disabled.get() {"opacity-50"} else {""})
+                placeholder="Select an option"
+                name="other_users"
+                node_ref=input_ref
+                on:click=move |_| hidden_state.update(|val| *val = !*val )/>
+                     <For
+                       each=move || input_signal.get()
+                       key=|input| input.1
+                       view=move |cx, item: (HtmlElement<Div>, i32)| {
+                         view! {
+                           cx,
+                             {item.0}
+                        }
+                     }/>
+              <ul class=move || format!("absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg {}", if hidden_state.get() {"hidden"} else {"block"})>
+                <Suspense fallback=loading_fallback(cx)>
+                     {move || users.read(cx).map(|options|
+                         view!{cx,
+                             <For
+                               each=move || options.clone().unwrap()
+                               key=|user| user.id
+                               view=move |cx, item: UserModel| {
+                                      let li_ref = create_node_ref::<html::Li>(cx);
+                                      let input = input_ref.get().unwrap();
+                                          (! input.value().contains(&(item.id.to_string()))).then(|| {
+                                            view! {
+                                              cx,
+                                               <li value=item.id _ref=li_ref class="text-sm z-[9999] px-4 py-2 cursor-pointer hover:bg-gray-100" on:click=move |_| {
+                                                    let input_ref = input.clone();
+                                                    let input = input.clone();
+                                                    hidden_state.set(true);
+                                                    let link = li_ref.get().unwrap();
+                                                    let link_ref = link.clone();
+                                                    let value = move || {
+                                                    match input_ref.value().chars().last() {
+                                                            Some(char) => {
+                                                                if char == ',' {
+                                                                    (input_ref.value() + &link_ref.value().to_string(), link_ref.value().to_string())
+                                                                } else {
+                                                                    (link_ref.value().to_string() + "," + &input_ref.value(), link_ref.value().to_string() + ",")
+                                                                }
+                                                            },
+                                                            None => {
+                                                                    (link_ref.value().to_string() + "," + &input_ref.value(), link_ref.value().to_string() + ",")
+                                                            }
+                                                        }};
+
+                                                    input.set_value(&(value().0));
+                                                    input_signal.update(|val| {
+                                                    val.push((
+                                                    view!{cx,
+                                                            <div class="flex mt-2 gap-x-3 text-sm border-gray-300 rounded-md bg-sky-200 p-2 w-fit" id=item.id>
+                                                                {link.inner_text()}
+                                                                <Icon icon=IoIcon::IoClose class="h-3 w-3" on:click=move |_| {
+                                                                    input_signal.update(|val| {
+                                                                        let index = val.iter().position(|(_, id)| *id == link.value()).unwrap();
+                                                                        val.remove(index);
+                                                                    });
+                                                                    (!input_signal.get().iter().any(|(_, id)| *id == link.value())).then(|| {
+                                                                        input.set_value(&(input.value().replace(&(link.value().to_string() + ","), "")));
+                                                                        input.set_value(&(input.value().replace(&(link.value().to_string()), "")));
+                                                                    });
+                                                                }/>
+                                                            </div>
+                                                    },item.id)
+                                                )})}>
+                                                    {item.first_name + " " + &item.last_name}
+                                               </li>
+                                         }
+                                         })
+                                     }/>
+                         })}
+                </Suspense>
+            </ul>
+        </div>
+        </div>
     }
 }
