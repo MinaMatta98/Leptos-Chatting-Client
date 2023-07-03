@@ -35,7 +35,7 @@ pub fn Modal(cx: Scope, children: Children, context: RwSignal<bool>) -> impl Int
             on:click=on_close
           >
             <span class="sr-only">"Close"</span>
-            <Icon icon=IoIcon::IoClose class="h-6 w-6 text-gray-900"/>
+            <Icon icon=Icon::from(IoIcon::IoClose) class="h-6 w-6 text-gray-900"/>
           </button>
         </div>
         {children(cx)}
@@ -134,7 +134,7 @@ pub fn ConfirmModal(cx: Scope) -> impl IntoView {
         <Modal context=drawer_context()>
             <div class="sm:flex sm:items-start">
                 <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center rounded-full justify-center bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <Icon icon=FiIcon::FiAlertTriangle class="h-6 w-6 text-red-600"/>
+                    <Icon icon=Icon::from(FiIcon::FiAlertTriangle) class="h-6 w-6 text-red-600"/>
                 </div>
             <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <div class="text-base font-semibold leading-6 text-gray-900">
@@ -348,7 +348,7 @@ fn Select(
                                                     view!{cx,
                                                             <div class="flex mt-2 gap-x-3 text-sm border-gray-300 rounded-md bg-sky-200 p-2 w-fit" id=item.id>
                                                                 {link.inner_text()}
-                                                                <Icon icon=IoIcon::IoClose class="h-3 w-3" on:click=move |_| {
+                                                                <Icon icon=Icon::from(IoIcon::IoClose) class="h-3 w-3" on:click=move |_| {
                                                                     input_signal.update(|val| {
                                                                         let index = val.iter().position(|(_, id)| *id == link.value()).unwrap();
                                                                         val.remove(index);

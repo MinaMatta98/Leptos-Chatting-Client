@@ -15,10 +15,10 @@ actix-session = { version = "0.7.2", features = ["redis", "redis-rs-session"], o
 actix = { version = "0.13.0", optional = true }
 console_error_panic_hook = "0.1"
 cfg-if = "1"
-leptos = { version = "0.3.1", default-features = false, features = ["serde"] }
-leptos_meta = { version = "0.3.1", default-features = false }
-leptos_actix = { version = "0.3.1", optional = true }
-leptos_router = { version = "0.3.1", default-features = false }
+leptos = { version = "0.4.1", default-features = false, features = ["serde", "nightly"] }
+leptos_meta = { version = "0.4.1", default-features = false, features = ["nightly"] }
+leptos_actix = { version = "0.4.1", optional = true }
+leptos_router = { version = "0.4.1", default-features = false, features = ["nightly"] }
 # leptos-use = { version = "0.3.3", default-features = false, features = ["storage"] }
 wasm-bindgen = "0.2.87"
 serde = { version = "1.0.163", features = ["derive"] }
@@ -44,16 +44,16 @@ chrono = "0.4.24"
 rand = "0.8.5"
 redis = "0.23.0"
 argon2 = "0.5.0"
-leptos_icons = { version = "0.0.12", default_features = false, features = ["AiCloseCircleFilled", "HiChatBubbleOvalLeftEllipsisSolidMd", "HiUserCircleSolidMd", "HiArrowLeftCircleOutlineLg", "AiUserOutlined", "AiUserAddOutlined", "HiChevronLeftSolidLg", "BiUserCircleSolid", "HiEllipsisHorizontalSolidMd", "TbPhotoFilled", "HiPaperAirplaneOutlineLg", "LuImageOff", "IoClose", "IoTrash", "FiAlertTriangle"] }
+leptos_icons = { git = "https://github.com/lpotthast/leptos-icons", branch = "leptos-0.4", default_features = false, features = ["AiCloseCircleFilled", "HiChatBubbleOvalLeftEllipsisSolidMd", "HiUserCircleSolidMd", "BiChevronLeftSquareSolid", "AiUserOutlined", "AiUserAddOutlined", "HiChevronLeftSolidLg", "BiUserCircleSolid", "HiEllipsisHorizontalSolidMd", "TbPhotoFilled", "HiPaperAirplaneOutlineLg", "LuImageOff", "IoClose", "IoTrash", "FiAlertTriangle"] }
 futures-util = "0.3.28"
 iter_tools = { version = "0.1.4", features = ["full"] }
 infer = "0.14.0"
 actix-web-actors = { version = "4.2.0", optional = true }
-image = { version = "0.24.6", features = ["rgb"], optional = true }
-turbojpeg = { version = "0.5.2", features = ["image"], optional = true }
 parking_lot = { version = "0.12.1", features = ["deadlock_detection", "hardware-lock-elision", "nightly", "arc_lock"] }
 async-broadcast = "0.5.1"
 async-channel = "1.8.0"
+turbojpeg = { version = "0.5.2", features = ["image"], optional = true }
+image = { version = "0.24.6", features = ["rgb"], optional = true }
 
 [build-dependencies]
 pkg-config = "0.3.26"
@@ -76,9 +76,9 @@ ssr = [
   "dep:lettre",
   "dep:tokio",
   "dep:actix-identity",
-  "dep:actix",
-  "dep:image",
   "dep:turbojpeg",
+  "dep:image",
+  "dep:actix",
   "dep:actix-web-actors",
   "dep:actix-session",
   "leptos/ssr",

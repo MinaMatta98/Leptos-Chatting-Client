@@ -21,7 +21,7 @@ pub struct UserContext {
 pub struct SidebarIcon<'a> {
     _label: &'a str,
     href: &'a str,
-    icon: HiIcon,
+    icon: Icon,
     active: Box<dyn Fn(Scope) -> &'a str>,
     on_click: Option<Box<dyn std::ops::Fn(Scope)>>,
 }
@@ -31,7 +31,7 @@ impl<'a> SidebarIcon<'a> {
         let chat = SidebarIcon {
             _label: "Chat",
             href: "/conversations",
-            icon: HiIcon::HiChatBubbleOvalLeftEllipsisSolidMd,
+            icon: leptos_icons::Icon::Hi(HiIcon::HiChatBubbleOvalLeftEllipsisSolidMd),
             active: Box::new(move |_| {
                 let path = use_location(cx).pathname.get();
                 path.contains("conversations")
@@ -44,7 +44,7 @@ impl<'a> SidebarIcon<'a> {
         let users = SidebarIcon {
             _label: "Users",
             href: "/user",
-            icon: HiIcon::HiUserCircleSolidMd,
+            icon: leptos_icons::Icon::Hi(HiIcon::HiUserCircleSolidMd),
             active: Box::new(move |_| {
                 (use_location(cx).pathname.get().as_str() == "/user")
                     .then_some("bg-gray-100 text-black")
@@ -56,7 +56,7 @@ impl<'a> SidebarIcon<'a> {
         let logout = SidebarIcon {
             _label: "Logout",
             href: "/login",
-            icon: HiIcon::HiArrowLeftCircleOutlineLg,
+            icon: leptos_icons::Icon::Bi(BiIcon::BiChevronLeftSquareSolid),
             active: Box::new(move |_| ""),
             on_click: Some(Box::new(|cx| {
                 create_resource(
@@ -234,7 +234,9 @@ fn MobileItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
         <A href=item.href class=move || format!("group flex gap-x-3 text-sm
             leading-6 font-semibold w-full justify-center p-4 hover:bg-gray-100 {}", (item.active)(cx))
             on:click=move |_| if let Some(function) = &item.on_click {function(cx)}>
-            <Icon style="gray" icon=item.icon class="h-6 w-6"/>
+            <Icon icon=Icon::from(item.icon) class="h-6 w-6"
+                style="fill: currentColor"
+            />
         </A>
     }
 }
@@ -244,8 +246,10 @@ fn DesktopItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
     view! { cx,
          <A on:click=move |_| if let Some(function) = &item.on_click {function(cx)} href=item.href
                   class=move || format!("group flex gap-x-3 rounded-md p-4 text-sm leading-6 font-semibold
-                     text-gray-500 hover:text-black hover:bg-gray-100 {}", (item.active)(cx))>
-                  <Icon icon=item.icon class="h-6 w-6 shrink-0" style="color: red"/>
+                     text-gray-800 hover:text-black hover:bg-gray-100 {}", (item.active)(cx))>
+                  <Icon icon=Icon::from(item.icon) class="h-6 w-6 shrink-0"
+                    style="fill: currentColor"
+                  />
          </A>
     }
 }

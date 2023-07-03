@@ -104,28 +104,28 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                                     loading_indicator_setter.set(String::from("hidden"));
                                     view!{cx, 
                                          <div class="flex items-center">"Ensure that all input criteria has been met"
-                                             <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                                             <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                                         </div>
                                     }
                                      },
                                      Ok(FormValidation::EmailPresent) => {
                                         loading_indicator_setter.set(String::from("hidden"));
                                         view!{cx, <div class="flex items-center">"Email is already registered on the server"
-                                             <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                                             <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                                             </div>
                                         }
                                     },
                                      Ok(FormValidation::PhonePresent) => {
                                         loading_indicator_setter.set(String::from("hidden"));
                                         view!{cx, <div class="items-center">"Phone number is already in use"
-                                             <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                                             <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                                             </div>
                                         }
                                     },
                                      Err(_) => {
                                         loading_indicator_setter.set(String::from("hidden"));
                                         view!{cx, <div class="items-center">"Server error has occured. Please try again later"
-                                             <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                                             <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                                             </div>
                                         }
                                     }
@@ -184,7 +184,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                         "Server Error has occured. Try again later."
                     }
                 }}
-                <Icon icon=AiIcon::AiCloseCircleFilled width="16px" height="16px" style="color: red"/>
+                <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="16px" height="16px" style="color: red"/>
             </div>
             }
             )}
@@ -226,7 +226,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                 Err(_) => {
                     setter.set(view! {cx, <div class="flex justify-center items-center">
                         <p class="text-center text-sm mx-1">{schema.return_error()}</p>
-                            <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                            <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                         </div>
                     });
                     color_setter.set("border-red-500");
@@ -288,7 +288,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                                         validator.set(view! {cx,
                                                   <div class="flex justify-center">
                                                         <p class="text-center text-sm mx-1">"That email address is already registered"</p>
-                                                        <Icon icon=AiIcon::AiCloseCircleFilled width="16px" height="16px" style="color: red"/>
+                                                        <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="16px" height="16px" style="color: red"/>
                                                   </div>
                                         });
                                     }
@@ -337,7 +337,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                                     validator.set(view! {cx,
                                               <div class="flex justify-center">
                                                   <p class="text-center text-sm mx-1">"That phone number is already registered"</p>
-                                                  <Icon icon=AiIcon::AiCloseCircleFilled width="12px" height="12px" style="color: red"/>
+                                                  <Icon icon=Icon::from(AiIcon::AiCloseCircleFilled) width="12px" height="12px" style="color: red"/>
                                               </div>
                                               });
                                 }

@@ -14,6 +14,8 @@ RUN apt update
 RUN apt-get install -y \
 	sudo\
 	lsb-release\
+	cmake\
+	nasm\
 	expect\
 	wget\
 	curl\

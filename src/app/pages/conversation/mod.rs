@@ -167,7 +167,7 @@ fn ConversationsLayout(cx: Scope, children: Children) -> impl IntoView {
                                             </div>
                                             <div class="rounded-full p-2 bg-gray-100 text-gray-600
                                             hover:opacity-75 transition cursor-pointer" on:click=move |_| group_chat_context.set(true)>
-                                                <Icon icon=AiIcon::AiUserAddOutlined class="text-20 text-gray-500"/>
+                                                <Icon icon=Icon::from(AiIcon::AiUserAddOutlined) class="text-20 text-gray-500"/>
                                             </div>
                                         </div>
                                      <For
@@ -355,7 +355,7 @@ fn Header(cx: Scope, conversation: Vec<ConversationMeta>) -> impl IntoView {
                 <A href="/conversations"
                     class="lg:hidden block text-sky-500
                     hover:text-sky-600 transition cursor-pointer">
-                         <Icon icon=HiIcon::HiChevronLeftSolidLg style="font-size: 16px; stroke: currentColor" on:click=move |_| {
+                         <Icon icon=Icon::from(HiIcon::HiChevronLeftSolidLg) style="font-size: 16px; stroke: currentColor" on:click=move |_| {
                                     use_context::<IsOpen>(cx).unwrap().status.set(false);
                                 }
                         />
@@ -435,7 +435,7 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
                     last.iter_mut()
                         .find(|context| context.conversation_id == id)
                         .map(|context| context.last_message_id += 1)
-                        .unwrap()
+                        .unwrap_or_default()
                 });
                 message_vec.unwrap().push(MergedMessages {
                     first_name: value.first_name.clone(),
@@ -512,7 +512,7 @@ fn MessageForm(cx: Scope) -> impl IntoView {
     view! {cx,
          <form on:submit=on_submit_callback class="py-4 px-4 bg-white border-t flex items-center gap-2 lg:gap-4 w-full ">
              <label for="submission">
-                     <Icon icon=TbIcon::TbPhotoFilled class="text-sky-500"
+                     <Icon icon=Icon::from(TbIcon::TbPhotoFilled) class="text-sky-500"
                      style="font-size: 32px; stroke: currentColor; fill: currentColor"/>
              </label>
                  <input type="file" _ref=image_ref id="submission" class="hidden"/>
@@ -520,7 +520,7 @@ fn MessageForm(cx: Scope) -> impl IntoView {
                  <MessageInput _input_ref/>
              </div>
              <button type="submit" class="rounded-full p-2 bg-sky-500 cursor-pointer hover:bg-sky-600 transition">
-                 <Icon icon=HiIcon::HiPaperAirplaneOutlineLg width="18px" class="text-white" style="stroke: white; fill: white"/>
+                 <Icon icon=Icon::from(HiIcon::HiPaperAirplaneOutlineLg) width="18px" class="text-white" style="stroke: white; fill: white"/>
              </button>
          </form>
     }
@@ -673,7 +673,7 @@ fn MessageBox(cx: Scope, message: MergedMessages, is_last: bool) -> impl IntoVie
                                              _ => {
                                                   view!{cx,
                                                       <>
-                                                          <Icon icon=LuIcon::LuImageOff width="36px" height="36px" class="text-white"/>
+                                                          <Icon icon=Icon::from(LuIcon::LuImageOff) width="36px" height="36px" class="text-white"/>
                                                       </>
                                                   }
                                                 }
@@ -745,7 +745,7 @@ where
                                              <button type="button" class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none
                                                 focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
                                                  <span class="sr-only">"Close Panel"</span>
-                                                          <Icon icon=IoIcon::IoClose width="24px" height="24px" on:click=on_close/>
+                                                          <Icon icon=Icon::from(IoIcon::IoClose) width="24px" height="24px" on:click=on_close/>
                                              </button>
                                          </div>
                                      </div>
@@ -770,7 +770,7 @@ where
                                         <div class="flex gap-10 my-8">
                                             <div on:click=move |_| () class="flex flex-col gap-3 items-center hover:opacity-75 cursor-pointer" on:click=move |_| drawer_context.status.set(true)>
                                                 <div class="w-10 h-10 bg-neutral-100 rounded-full flex items-center justify-center">
-                                                          <Icon icon=IoIcon::IoTrash width="20px" height="24px"/>
+                                                          <Icon icon=Icon::from(IoIcon::IoTrash) width="20px" height="24px"/>
                                                 </div>
                                                 <div class="text-sm font-light text-neutral-600">
                                                     "Delete"
