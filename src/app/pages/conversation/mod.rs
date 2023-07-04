@@ -414,7 +414,13 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
         {
             seen_context.get().get(index).unwrap().last_message_id
         } else {
-            let last_message = boxed_messages.clone().iter().last().unwrap().message_id;
+
+            let last_message = if let Some(last_message) = boxed_messages.clone().iter().last() {
+                last_message.message_id
+            } else {
+                0
+            };
+
             seen_context.update(|seen_vec| {
                 seen_vec.push(SeenContextInner {
                     conversation_id: id,
