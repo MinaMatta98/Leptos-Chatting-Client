@@ -37,7 +37,7 @@ Libraries for simple control over wasm functions. Used for serialization and ini
 Broadcast channels for web-socket stream handling and cross-platform access to a single connection, where a connection impl !Send. In practical fashion, this entails a single access point to a sender, via clonable receivers which can be distributed, meaning that a single access point is needed for the connection, but a bridge may be established via a single non-blocking listener being polled via [select!](https://docs.rs/futures-util/latest/futures_util/future/fn.select.html).
 ```
                ┌───────────────────┐
-               │      Sender       │
+               │      Sender        │
                └─────────┬─────────┘
                           │ 
                           ▼ 
@@ -48,7 +48,7 @@ Broadcast channels for web-socket stream handling and cross-platform access to a
          ┌───────────────┴─────────────┬───────────...────────────┐
          │                                │                           │
   ┌──────┴────────┐           ┌────────┴───────┐         ┌────────┴───────┐
-  │   Receiver 1  │           │   Receiver 2   │   ...   │  nth Receiver  │
+  │   Receiver 1  │            │   Receiver 2   │   ...   │  nth Receiver  │
   └───────────────┘           └────────────────┘         └────────────────┘
 ```
 ## Features
