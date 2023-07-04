@@ -4,7 +4,7 @@ use leptos_router::*;
 
 use crate::{
     app::{
-        pages::{conversation::ConversationParams, Avatar, SettingsModal},
+        pages::{conversation::ConversationParams, Avatar, SettingsModal, ICONVEC, SINKVEC},
         IsOpen, SideBarContext,
     },
     server_function::{self, login_status, UserLogin},
@@ -235,8 +235,15 @@ fn MobileItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
     view! {cx,
         <A href=item.href class=move || format!("group flex gap-x-3 text-sm
             leading-6 font-semibold w-full justify-center p-4 hover:bg-gray-100 {}", (item.active)(cx))
-            on:click=move |_| if let Some(function) = &item.on_click {function(cx)}>
-            <Icon icon=Icon::from(item.icon) class="h-6 w-6"
+            on:click=move |_|
+            if let Some(function) = &item.on_click {
+                    function(cx);
+                    ICONVEC.write().clear();
+                    STREAMVEC.write().clear();
+                    SINKVEC.write().clear();
+            }
+            >
+            <Icon icon=item.icon class="h-6 w-6"
                 style="fill: currentColor"
             />
         </A>
@@ -246,10 +253,17 @@ fn MobileItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
 #[component]
 fn DesktopItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
     view! { cx,
-         <A on:click=move |_| if let Some(function) = &item.on_click {function(cx)} href=item.href
+         <A on:click=move |_|
+            if let Some(function) = &item.on_click {
+                    function(cx);
+                    ICONVEC.write().clear();
+                    STREAMVEC.write().clear();
+                    SINKVEC.write().clear();
+            }
+                href=item.href
                   class=move || format!("group flex gap-x-3 rounded-md p-4 text-sm leading-6 font-semibold
                      text-gray-800 hover:text-black hover:bg-gray-100 {}", (item.active)(cx))>
-                  <Icon icon=Icon::from(item.icon) class="h-6 w-6 shrink-0"
+                  <Icon icon=item.icon class="h-6 w-6 shrink-0"
                     style="fill: currentColor"
                   />
          </A>
