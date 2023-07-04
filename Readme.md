@@ -34,8 +34,8 @@ Libraries for simple control over wasm functions. Used for serialization and ini
 [Web-Socket](https://javascript.info/websocket) real time reactivity and chat updates, mimicking [pusher](https://pusher.com/) functionality. This allows for real time chat and icon updates, including tracking of members connected to a specific conversation.
 
 * [Async-Broadcast](https://github.com/smol-rs/async-broadcast):
-Broadcast channels for web-socket stream handling and cross-platform access to a single connection, where a connection impl !Send. In practical fashion, this entails a single access point to a sender, via clonable receivers which can be distributed, meaning that a single access point is needed for the connection, but a bridge may be established via a single non-blocking listener being polled via [select!](https://docs.rs/futures-util/latest/futures_util/future/fn.select.html)
-
+Broadcast channels for web-socket stream handling and cross-platform access to a single connection, where a connection impl !Send. In practical fashion, this entails a single access point to a sender, via clonable receivers which can be distributed, meaning that a single access point is needed for the connection, but a bridge may be established via a single non-blocking listener being polled via [select!](https://docs.rs/futures-util/latest/futures_util/future/fn.select.html).
+```
                ┌───────────────────┐
                │      Sender       │
                └─────────┬─────────┘
@@ -50,7 +50,7 @@ Broadcast channels for web-socket stream handling and cross-platform access to a
   ┌──────┴────────┐           ┌────────┴───────┐         ┌────────┴───────┐
   │   Receiver 1  │           │   Receiver 2   │   ...   │  nth Receiver  │
   └───────────────┘           └────────────────┘         └────────────────┘
-
+```
 ## Features
 * User Authentication and Verification.
 * Database Management w/ CRUD and SQL Join Statements. User Password hashing achieved via argon2.
