@@ -39,16 +39,16 @@ Broadcast channels for web-socket stream handling and cross-platform access to a
                ┌───────────────────┐
                │      Sender       │
                └─────────┬─────────┘
-                         │ 
-                         ▼ 
+                          │ 
+                          ▼ 
                ┌───────────────────┐
-               │    Broadcast      │
+               │    Broadcast       │
                └─────────┬─────────┘
-                         │ 
+                          │ 
          ┌───────────────┴─────────────┬───────────...────────────┐
          │                                │                           │
   ┌──────┴────────┐           ┌────────┴───────┐         ┌────────┴───────┐
-  │   Receiver 1   │           │   Receiver 2   │   ...   │  nth Receiver  │
+  │   Receiver 1  │           │   Receiver 2   │   ...   │  nth Receiver  │
   └───────────────┘           └────────────────┘         └────────────────┘
 ```
 ## Features
