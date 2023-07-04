@@ -38,7 +38,7 @@ Libraries for simple control over wasm functions. Used for serialization and ini
 
 * [Async-Broadcast](https://github.com/smol-rs/async-broadcast):
 Broadcast channels for web-socket stream handling and cross-platform access to a single connection, where a connection impl !Send. In practical fashion, this entails a single access point to a sender, via clonable receivers which can be distributed, meaning that a single access point is needed for the connection, but a bridge may be established via a single non-blocking listener being polled via [select!](https://docs.rs/futures-util/latest/futures_util/future/fn.select.html). For types that do not implement Send, a classical access approach is via a single entry point to a sender, as demonstrated below.
-```
+```rust
                ┌───────────────────┐          Poll          ┌────────────────────────────┐ 
                │      Sender        │       ◀─────────     │    Object/Stream (!Send)    │
                └─────────┬─────────┘                        └────────────────────────────┘
