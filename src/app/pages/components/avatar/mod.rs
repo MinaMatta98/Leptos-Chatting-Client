@@ -40,9 +40,6 @@ pub enum WebSocketState {
     PassThrough,
 }
 
-// impl Clear for WsVecType {
-// }
-
 fn push_to_map<'a, F>(accessor: F, id: i32, data: WsData, channel: SyncChannel)
 where
     F: FnOnce() -> RwLockWriteGuard<'a, HashMap<(WsData, i32), SyncChannel>>,

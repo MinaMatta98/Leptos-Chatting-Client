@@ -9,8 +9,6 @@ use leptos::{
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::cell;
-use std::rc::Rc;
 
 use super::components::avatar::{self, IconData, SINKVEC, STREAMVEC};
 use super::conversation::Message;
@@ -42,19 +40,6 @@ impl SyncChannel {
         match self {
             SyncChannel::BroadCast(_, ref mut rx) => rx.next().await,
             SyncChannel::Mpsc(_, ref mut rx) => rx.next().await,
-        }
-    }
-
-    pub async fn rebound_sink(
-        &mut self,
-        sink: &mut SplitSink<WebSocket, gloo_net::websocket::Message>,
-    ) {
-        while let Some(message) = self.next().await {
-            sink.send(gloo_net::websocket::Message::Text(
-                serde_json::to_string(&message.into_inner()).unwrap(),
-            ))
-            .await
-            .unwrap();
         }
     }
 

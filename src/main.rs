@@ -117,12 +117,7 @@ async fn main() -> std::io::Result<()> {
 
     use actix_files::Files;
     use actix_web::middleware::{Compress, Logger, NormalizePath};
-    use server_function::{
-        AssociatedConversation, ConfirmSubscription, ConversationAction, CreateGroupConversation,
-        DeleteConversation, FindImage, GetConversations, GetIcon, GetImage, GetUser, GetUsers,
-        HandleMessageInput, HandleSeen, Login, LoginStatus, Logout, Redirect, SignUp, UploadImage,
-        Validate, ValidateConversation, VerifyEmail, ViewMessages,
-    };
+    
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;
     use actix_session::{storage::RedisSessionStore, SessionMiddleware};
@@ -131,30 +126,6 @@ async fn main() -> std::io::Result<()> {
 
     let conf = get_configuration(None).await.unwrap();
     let addr = conf.leptos_options.site_addr;
-
-    SignUp::register().unwrap();
-    Validate::register().unwrap();
-    VerifyEmail::register().unwrap();
-    ConfirmSubscription::register().unwrap();
-    Login::register().unwrap();
-    Logout::register().unwrap();
-    LoginStatus::register().unwrap();
-    Redirect::register().unwrap();
-    GetUsers::register().unwrap();
-    GetUser::register().unwrap();
-    GetConversations::register().unwrap();
-    ConversationAction::register().unwrap();
-    ViewMessages::register().unwrap();
-    ValidateConversation::register().unwrap();
-    AssociatedConversation::register().unwrap();
-    HandleMessageInput::register().unwrap();
-    HandleSeen::register().unwrap();
-    FindImage::register().unwrap();
-    DeleteConversation::register().unwrap();
-    UploadImage::register().unwrap();
-    GetIcon::register().unwrap();
-    GetImage::register().unwrap();
-    CreateGroupConversation::register().unwrap();
 
     tokio::task::spawn_local(clear_temp_db());
 

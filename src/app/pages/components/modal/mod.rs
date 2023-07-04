@@ -303,7 +303,7 @@ fn Select(
                      <For
                        each=move || input_signal.get()
                        key=|input| input.1
-                       view=move |cx, item: (HtmlElement<Div>, i32)| {
+                       view=move |_cx, item: (HtmlElement<Div>, i32)| {
                          view! {
                            cx,
                              {item.0}
