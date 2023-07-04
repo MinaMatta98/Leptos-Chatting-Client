@@ -10,6 +10,8 @@ use crate::{
     server_function::{self, login_status, UserLogin},
 };
 
+use super::avatar::STREAMVEC;
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct UserContext {
     pub id: RwSignal<i32>,

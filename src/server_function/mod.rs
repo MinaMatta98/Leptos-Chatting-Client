@@ -152,9 +152,9 @@ pub struct MessageStructFacing {
 use crate::app::{EmailSchema, PhoneSchema, VerificationValidation, VerifyPassword};
 
 #[cfg(feature = "ssr")]
-use crate::entities::{conversation, user_conversation};
-#[cfg(feature = "ssr")]
 use crate::app::FormValidation;
+#[cfg(feature = "ssr")]
+use crate::entities::{conversation, user_conversation};
 
 #[derive(Debug, Serialize, Deserialize)]
 enum UserValidation {
@@ -725,11 +725,11 @@ pub async fn login(
                             )
                             .unwrap();
                             Ok(VerifyPassword::Success(UserLogin {
-                                    id: user.id,
-                                    email: user.email,
-                                    first_name: user.first_name,
-                                    last_name: user.last_name,
-                                }))
+                                id: user.id,
+                                email: user.email,
+                                first_name: user.first_name,
+                                last_name: user.last_name,
+                            }))
                         }
                         false => Ok(VerifyPassword::IncorrectCredentials),
                     }
@@ -1288,8 +1288,8 @@ pub async fn handle_message_input(
                         .as_secs()
                         .to_string();
 
-                    if std::fs::metadata("./upload").is_err() {
-                        std::fs::create_dir_all("./upload").unwrap();
+                    if tokio::fs::metadata("./upload").await.is_err() {
+                        tokio::fs::create_dir_all("./upload").await.unwrap();
                     };
 
                     let kind = infer::get(&image_vec).expect("file type is known");
@@ -1310,7 +1310,9 @@ pub async fn handle_message_input(
                     } else {
                         image_vec
                     };
-                    std::fs::write("./upload/".to_string() + &current_time + ".png", image).ok();
+                    tokio::fs::write("./upload/".to_string() + &current_time + ".png", image)
+                        .await
+                        .ok();
                     image_location = Some("/upload/".to_string() + &current_time + ".png")
                 };
 
@@ -1337,11 +1339,13 @@ pub async fn handle_message_input(
 #[server(FindImage, "/api", "Url")]
 pub async fn find_image(cx: Scope, image_path: String) -> Result<ImageAvailability, ServerFnError> {
     Ok(
-        match std::fs::metadata(
+        match tokio::fs::metadata(
             std::env::current_dir()
                 .unwrap()
                 .join(format!("upload/{}", image_path.split('/').last().unwrap())),
-        ) {
+        )
+        .await
+        {
             Ok(_) => ImageAvailability::Found,
             Err(_) => ImageAvailability::Missing,
         },
@@ -1492,8 +1496,8 @@ pub async fn upload_user_info(
                         .as_secs()
                         .to_string();
 
-                    if std::fs::metadata("./images").is_err() {
-                        std::fs::create_dir_all("./images").unwrap();
+                    if tokio::fs::metadata("./images").await.is_err() {
+                        tokio::fs::create_dir_all("./images").await.unwrap();
                     };
 
                     let image_path = "images/".to_string() + &current_time + ".png";
@@ -1514,7 +1518,7 @@ pub async fn upload_user_info(
                     } else {
                         image
                     };
-                    std::fs::write(&image_path, image).unwrap();
+                    tokio::fs::write(&image_path, image).await.unwrap();
 
                     AppendDatabase::modify(
                         user,
@@ -1539,7 +1543,7 @@ pub async fn upload_user_info(
 
 #[server(GetIcon, "/api", "Url")]
 pub async fn get_icon(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnError> {
-    use std::io::Read;
+    use tokio::io::AsyncReadExt;
     leptos_actix::extract(
         cx,
         move |data: actix_web::web::Data<tokio::sync::Mutex<crate::database::DbConnection>>| {
@@ -1551,9 +1555,9 @@ pub async fn get_icon(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnErr
                              .unwrap_or_default()
                              .join(image);
 
-                         if let Ok(mut file) = std::fs::File::open(path) {
+                         if let Ok(mut file) = tokio::fs::File::open(path).await {
                              let mut buffer = Vec::new();
-                             file.read_to_end(&mut buffer).unwrap();
+                             file.read_to_end(&mut buffer).await.unwrap();
                              Some(buffer)
                         } else {
                              None
@@ -1569,14 +1573,14 @@ pub async fn get_icon(cx: Scope, id: i32) -> Result<Option<Vec<u8>>, ServerFnErr
 
 #[server(GetImage, "/api", "Url")]
 pub async fn get_image(cx: Scope, path: String) -> Result<Option<Vec<u8>>, ServerFnError> {
-    use std::io::Read;
+    use tokio::io::AsyncReadExt;
     let mut path = path;
     path.remove(0);
     let path = std::env::current_dir().unwrap().join(path);
 
     let mut buffer = Vec::new();
-    if let Ok(mut file) = std::fs::File::open(path) {
-        file.read_to_end(&mut buffer).unwrap();
+    if let Ok(mut file) = tokio::fs::File::open(path).await {
+        file.read_to_end(&mut buffer).await.unwrap();
         Ok(Some(buffer))
     } else {
         Ok(None)

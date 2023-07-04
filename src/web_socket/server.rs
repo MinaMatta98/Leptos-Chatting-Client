@@ -164,16 +164,18 @@ impl Handler<Disconnect> for ChatServer {
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
         println!("Someone disconnected");
 
-        let mut rooms: Vec<usize> = Vec::new();
+        // let mut rooms: Vec<usize> = Vec::new();
 
         // remove address
         if self.sessions.remove(&msg.id).is_some() {
+            self.rooms.remove(&msg.id);
+            self.users.retain(|(_, id), _| *id == msg.id);
             // remove session from all rooms
-            for (name, sessions) in &mut self.rooms {
-                if sessions.remove(&msg.id) {
-                    rooms.push(name.to_owned());
-                }
-            }
+            // for (name, sessions) in &mut self.rooms {
+            //     if sessions.remove(&msg.id) {
+            //         rooms.push(name.to_owned());
+            //     }
+            // }
         }
         // send message to other users
         // for room in rooms {

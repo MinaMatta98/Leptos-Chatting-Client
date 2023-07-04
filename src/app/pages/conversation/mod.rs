@@ -37,7 +37,7 @@ pub enum ImageEnum {
     None,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct Message {
     pub message: Option<String>,
     pub image: Option<String>,
@@ -107,13 +107,15 @@ struct ConversationIdParams {
 
 #[component]
 pub fn Conversations(cx: Scope) -> impl IntoView {
-    ICONVEC.write().clear();
-    STREAMVEC.write().clear();
-    super::components::avatar::SINKVEC.write().clear();
-
     UserContexts::init_all(cx);
     let status = create_local_resource(cx, || (), move |_| async move { login_status(cx).await });
     use_context::<IsOpen>(cx).unwrap().status.set(false);
+
+    leptos::on_cleanup(cx, || {
+        ICONVEC.write().clear();
+        STREAMVEC.write().clear();
+        SINKVEC::send_clear();
+    });
 
     view! {cx,
             <Suspense fallback=||()>

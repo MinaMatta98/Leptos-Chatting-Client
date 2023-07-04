@@ -12,9 +12,11 @@ use crate::{
 #[component]
 pub fn Users(cx: Scope) -> impl IntoView {
     UserContexts::init_users(cx);
-    ICONVEC.write().clear();
-    STREAMVEC.write().clear();
-    SINKVEC.write().clear();
+    leptos::on_cleanup(cx, || {
+        ICONVEC.write().clear();
+        STREAMVEC.write().clear();
+        SINKVEC::send_clear();
+    });
     view! {cx,
         <Sidebar>
             <UserList/>

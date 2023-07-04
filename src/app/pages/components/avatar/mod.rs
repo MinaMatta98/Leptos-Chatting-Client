@@ -40,6 +40,9 @@ pub enum WebSocketState {
     PassThrough,
 }
 
+// impl Clear for WsVecType {
+// }
+
 fn push_to_map<'a, F>(accessor: F, id: i32, data: WsData, channel: SyncChannel)
 where
     F: FnOnce() -> RwLockWriteGuard<'a, HashMap<(WsData, i32), SyncChannel>>,
@@ -78,6 +81,16 @@ impl SINKVEC {
                 channel
             }
         }
+    }
+
+    pub fn send_clear() {
+        spawn_local(async move {
+            let mut lock = SINKVEC.write();
+            for (_, sync_channel) in lock.iter_mut() {
+                sync_channel.send(StreamData::Close).await
+            }
+            lock.clear();
+        })
     }
 }
 

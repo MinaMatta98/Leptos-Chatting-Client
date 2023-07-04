@@ -1,6 +1,6 @@
 use async_broadcast::{Receiver, Sender};
 use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{select, FutureExt, SinkExt, StreamExt};
 use gloo_net::websocket::futures::WebSocket;
 use leptos::html::Input;
 use leptos::{
@@ -9,12 +9,14 @@ use leptos::{
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::cell;
+use std::rc::Rc;
 
-use crate::server_function::handle_message_input;
 use super::components::avatar::{self, IconData, SINKVEC, STREAMVEC};
-use super::UserContext;
 use super::conversation::Message;
+use super::UserContext;
 use crate::app::{pages::components::avatar::ToStreamData, SeenContext};
+use crate::server_function::handle_message_input;
 
 #[derive(Debug, Clone)]
 pub enum SyncChannel {
@@ -77,10 +79,11 @@ impl SyncChannel {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StreamData {
     Message(Message),
     IconData(IconData),
+    Close,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -112,6 +115,7 @@ impl StreamData {
         match self {
             Self::Message(message) => serde_json::to_value(message).unwrap(),
             Self::IconData(icon_data) => serde_json::to_value(icon_data).unwrap(),
+            Self::Close => serde_json::to_value("command: close").unwrap(),
         }
     }
 }
@@ -164,9 +168,10 @@ impl HandleWebSocket {
         };
 
         let (mut sync_channel, state) = STREAMVEC::sync_stream(id, data);
-        let function_clone = function.clone();
         let mut sync_clone = sync_channel.clone();
+        let function_clone = function.clone();
         let mut rx_sink = SINKVEC::sync_stream(id, data);
+        let mut rx_sink_clone = rx_sink.clone();
         let messages = move || messages;
 
         spawn_local(async move {
@@ -175,43 +180,52 @@ impl HandleWebSocket {
 
         if let avatar::WebSocketState::NewConnection = state {
             let (mut sink, mut ws_read) = Self::handle_websocket(url, id);
-            spawn_local(async move {
-                rx_sink.rebound_sink(&mut sink).await;
-                leptos::on_cleanup(cx, move || {
-                    spawn_local(async move {
-                        STREAMVEC
-                            .write()
-                            .retain(|(_, stream_id), _| id != *stream_id);
-                        SINKVEC.write().retain(|(_, sink_id), _| id != *sink_id);
-                        sink.close().await.unwrap();
-                    })
-                });
+            leptos::on_cleanup(cx, move || {
+                STREAMVEC
+                    .write()
+                    .retain(|(_, stream_id), _| id != *stream_id);
+                SINKVEC.write().retain(|(_, sink_id), _| id != *sink_id);
+                log!("CLEANING WEBSOCKET");
+                spawn_local(async move {
+                    rx_sink_clone.send(StreamData::Close).await;
+                })
             });
 
             spawn_local(async move {
-                while let Some(value) = ws_read.next().await {
-                    let result = match value {
-                        Ok(gloo_net::websocket::Message::Text(text)) => {
-                            let _ = sync_channel
-                                .send(std::string::String::from_inner(text.trim()).unwrap())
-                                .await;
-                            Some(serde_json::from_str(&text))
-                        }
-                        Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
-                            log!("BYTES?");
-                            let text = String::from_utf8(bytes).unwrap();
-                            Some(serde_json::from_str(&text))
-                        }
-                        _ => None,
-                    };
-
-                    if let Some(Ok(value)) = result {
-                        let value: E = value;
-                        match messages() {
-                            Some(messages) => messages.update(|signal_inner| {
-                                function(Some(signal_inner), value);
-                            }),
-                            None => function(None, value),
+                loop {
+                    select! {
+                            message = rx_sink.next().fuse() => {
+                                if message.as_ref().unwrap() == &StreamData::Close {
+                                    sink.close().await.unwrap()
+                                } else {
+                                sink.send(gloo_net::websocket::Message::Text(
+                                    serde_json::to_string(&message.unwrap().into_inner()).unwrap(),
+                                ))
+                                .await
+                                .unwrap()
+                            }
+                            },
+                            value = ws_read.next().fuse() => {
+                                if let Some(value) = value {
+                                    match value {
+                                    Ok(gloo_net::websocket::Message::Text(text)) => {
+                                        let _ = sync_channel
+                                            .send(std::string::String::from_inner(text.trim()).unwrap())
+                                            .await;
+                                        let value: E = serde_json::from_str(&text).unwrap();
+                                        match messages() {
+                                            Some(messages) => messages.update(|signal_inner| {
+                                                function(Some(signal_inner), value);
+                                            }),
+                                            None => function(None, value),
+                                        };
+                                    },
+                                    Ok(gloo_net::websocket::Message::Bytes(_)) => {
+                                        log!("BYTES?");
+                                    },
+                                    _ => (),
+                                };
+                            }
                         }
                     }
                 }
