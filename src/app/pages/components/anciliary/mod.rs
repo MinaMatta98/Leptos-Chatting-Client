@@ -240,7 +240,7 @@ fn MobileItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
                     function(cx);
                     ICONVEC.write().clear();
                     STREAMVEC.write().clear();
-                    SINKVEC.write().clear();
+                    SINKVEC::send_clear();
             }
             >
             <Icon icon=item.icon class="h-6 w-6"
@@ -258,7 +258,7 @@ fn DesktopItem(cx: Scope, item: SidebarIcon<'static>) -> impl IntoView {
                     function(cx);
                     ICONVEC.write().clear();
                     STREAMVEC.write().clear();
-                    SINKVEC.write().clear();
+                    SINKVEC::send_clear();
             }
                 href=item.href
                   class=move || format!("group flex gap-x-3 rounded-md p-4 text-sm leading-6 font-semibold
