@@ -115,3 +115,4 @@ leptos_actix::extract(
         ...
 })
 ```
+* This project uses [parking_lot::RwLock](https://docs.rs/parking_lot/latest/parking_lot/) as a synchronisation primitive for multi-threaded lock access. These locks are used across await points, and this is NOT recommended, unless the critical section within the acquired lock is very short and blocking operations are not computationally intensive. Otherwise, threads cannot be left to yield back to the executor. Instead, use a non-blocking locking data-structure, such as [tokio::sync::RwLock](https://docs.rs/tokio/latest/tokio/sync/struct.RwLock.html), which allow threads to yield back to the executor.
