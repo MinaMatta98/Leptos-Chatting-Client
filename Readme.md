@@ -93,7 +93,25 @@ For effective use, create 3 different user accounts to experiment with group cha
 
 A burner email is used for the verification process for demonstrative purposes.
 
-## Coming Soon
-The following features will be implemented soon:
+## Recommendations
+This repository has been implemented as a proof of concept. Prior to copying this implementation for production purposes, the following recommendations are made:
 
-* Improvements to the sign-up and login user interface.
+* SQL databases should not have incremental querying.
+* Returning a Bytes Vector should be streamed. For example, instead of a return type of Result<Vec<u8>>, return:
+```rust
+fn() -> Result<impl futures_util::Stream<Item = &[u8], std::io::Error>> + Unpin + Serialize + Deserialize>>>
+```
+&nbsp; This is a far more efficient format, especially with consideration to memory management. Moreover, instead of Vec<u8> consider using [Bytes](https://docs.rs/bytes/latest/bytes/), such that cloning a bytes vector is not possible and a pointer to the vector is returned instead.
+
+&nbsp; It is possible to achieve this via the following crates: [futures-util::stream](https://docs.rs/futures-util/latest/futures_util/index.html) or [async_stream::stream!](https://docs.rs/async-stream/latest/async_stream/index.html). In order to ensure that data is kept in sync, it is essential to pin the stream to a specific location in memory. Consider the use of [tokio::pin!](https://dtantsur.github.io/rust-openstack/tokio/macro.pin.html). Standard compiler checks should disallow the compilation of any streams where std::pin is not implemented. Note:
+> Calls to async fn return anonymous Future values that are !Unpin. These values must be pinned before they can be polled.
+* Returning images should be hidden behind a cache. Consider [lazy-static!](https://docs.rs/lazy_static/latest/lazy_static/)
+or [leptos::use_context](https://docs.rs/leptos/latest/leptos/fn.use_context.html). Note that no private information is to be stored within memory.
+* So far, these suggestions have considered client side improvements. Server-side caching should also be used. Consider the use of [actix_sled_cache](https://docs.rs/actix-sled-cache/latest/actix_sled_cache/) and de-structuring the cache via:
+```rust
+leptos_actix::extract(
+    cx,
+    move |cache: actix_web::web::Data<actix_sled_cache::Cache>| {
+        ...
+})
+```
