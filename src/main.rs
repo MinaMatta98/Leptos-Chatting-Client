@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
 #![feature(async_closure)]
+#![feature(impl_trait_in_assoc_type)]
 use actix::Addr;
 use actix::*;
 use actix_web::web;
@@ -117,7 +118,7 @@ async fn main() -> std::io::Result<()> {
 
     use actix_files::Files;
     use actix_web::middleware::{Compress, Logger, NormalizePath};
-    
+
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
     use actix_identity::IdentityMiddleware;
     use actix_session::{storage::RedisSessionStore, SessionMiddleware};
@@ -171,8 +172,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(NormalizePath::new(
                 actix_web::middleware::TrailingSlash::Trim,
             ))
-            .service(image_path)
-            .service(upload_path)
             .service(Files::new("/", site_root))
     })
     .bind(&addr)?

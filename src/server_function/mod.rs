@@ -445,8 +445,7 @@ pub async fn sign_up(
                     if Users::find()
                         .filter(users::server::Column::Email.eq(entry.clone()))
                         .one(&data.lock().await.connection)
-                        .await
-                        .unwrap()
+                        .await?
                         .is_some()
                     {
                         Ok(crate::app::FormValidation::EmailPresent)
@@ -456,12 +455,10 @@ pub async fn sign_up(
                                 .phone_number
                                 .entry
                                 .replace('+', "")
-                                .parse::<i64>()
-                                .unwrap()),
+                                .parse::<i64>()?),
                         )
                         .one(&data.lock().await.connection)
-                        .await
-                        .unwrap()
+                        .await?
                         .is_some()
                     {
                         Ok(super::app::FormValidation::PhonePresent)
@@ -491,8 +488,7 @@ pub async fn sign_up(
                                     .chars()
                                     .filter(|c| c.is_ascii_digit())
                                     .collect::<String>()
-                                    .parse::<i64>()
-                                    .unwrap(),
+                                    .parse::<i64>()?,
                             ),
                             password: ActiveValue::Set({
                                 let salt = SaltString::generate(&mut OsRng);
@@ -525,8 +521,7 @@ pub async fn sign_up(
                 }
             },
         )
-        .await
-        .unwrap()
+        .await?
     }
 }
 
@@ -550,14 +545,12 @@ pub async fn cred_validation(
                     if TempUsers::find()
                         .filter(temp_users::server::Column::Email.eq(email.entry.clone()))
                         .one(db)
-                        .await
-                        .unwrap()
+                        .await?
                         .is_some()
                         || Users::find()
                             .filter(users::server::Column::Email.eq(email.entry))
                             .one(db)
-                            .await
-                            .unwrap()
+                            .await?
                             .is_some()
                     {
                         Ok(FormValidation::EmailPresent)
@@ -577,8 +570,7 @@ pub async fn cred_validation(
                             .unwrap()),
                     )
                     .one(db)
-                    .await
-                    .unwrap()
+                    .await?
                     .is_some()
                     || Users::find()
                         .filter(
@@ -590,8 +582,7 @@ pub async fn cred_validation(
                                 .unwrap()),
                         )
                         .one(db)
-                        .await
-                        .unwrap()
+                        .await?
                         .is_some()
                 {
                     Ok(FormValidation::PhonePresent)
@@ -603,8 +594,7 @@ pub async fn cred_validation(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(VerifyEmail, "/api", "Url")]
@@ -671,8 +661,7 @@ pub async fn confirm_subscription(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(Login, "/api", "Url")]
@@ -704,8 +693,7 @@ pub async fn login(
                 if let Some(user) = Users::find()
                     .filter(users::server::Column::Email.eq(email.clone()))
                     .one(db)
-                    .await
-                    .unwrap()
+                    .await?
                 {
                     let parsed_hash = PasswordHash::new(&user.password).unwrap();
                     match Argon2::default()
@@ -720,10 +708,10 @@ pub async fn login(
                                     email: user.email.clone(),
                                     first_name: user.first_name.clone(),
                                     last_name: user.last_name.clone(),
-                                })
-                                .unwrap(),
+                                })?,
                             )
                             .unwrap();
+
                             Ok(VerifyPassword::Success(UserLogin {
                                 id: user.id,
                                 email: user.email,
@@ -739,8 +727,7 @@ pub async fn login(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(LoginStatus, "/api", "Url")]
@@ -754,8 +741,7 @@ pub async fn login_status(cx: Scope) -> Result<UserLogin, ServerFnError> {
         };
         Ok(user)
     })
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(Redirect, "/api", "Url")]
@@ -790,14 +776,11 @@ pub async fn get_users(cx: Scope) -> Result<Vec<UserModel>, ServerFnError> {
                     .order_by_asc(users::server::Column::Id)
                     .filter(users::server::Column::Id.ne(user.id))
                     .all(data)
-                    .await
-                    .unwrap())
+                    .await?)
             }
         },
     )
-    .await
-    .unwrap()
-    .unwrap()
+    .await??
     .into_iter()
     .map_into()
     .rev()
@@ -914,8 +897,7 @@ pub async fn get_conversations(cx: Scope) -> Result<Vec<MergedConversation>, Ser
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(Logout, "/api", "Url")]
@@ -993,8 +975,7 @@ pub async fn conversation_action(
                     )
                     .into_model::<ExtractedConversation>()
                     .all(data)
-                    .await
-                    .unwrap();
+                    .await?;
 
                 if resolved_conversations.iter().all_unique() || resolved_conversations.len().eq(&0)
                 {
@@ -1008,8 +989,7 @@ pub async fn conversation_action(
                                     ..Default::default()
                                 })
                                 .exec(data)
-                                .await
-                                .unwrap();
+                                .await?;
 
                             for user in [user.id, *other_users.first().unwrap()].iter() {
                                 UserConversation::insert(user_conversation::server::ActiveModel {
@@ -1017,8 +997,7 @@ pub async fn conversation_action(
                                     conversation_id: ActiveValue::Set(conversation.last_insert_id),
                                 })
                                 .exec(data)
-                                .await
-                                .unwrap();
+                                .await?;
                             }
                         }
                         true => {
@@ -1029,8 +1008,7 @@ pub async fn conversation_action(
                                     ..Default::default()
                                 })
                                 .exec(data)
-                                .await
-                                .unwrap();
+                                .await?;
 
                             let mut vec_users = Vec::new();
                             [vec![user.id], other_users]
@@ -1045,10 +1023,7 @@ pub async fn conversation_action(
                                     })
                                 });
 
-                            UserConversation::insert_many(vec_users)
-                                .exec(data)
-                                .await
-                                .unwrap();
+                            UserConversation::insert_many(vec_users).exec(data).await?;
                         }
                     }
                     Ok(())
@@ -1059,9 +1034,7 @@ pub async fn conversation_action(
             }
         },
     )
-    .await
-    .unwrap()
-    .unwrap();
+    .await??;
     Ok(())
 }
 
@@ -1100,8 +1073,7 @@ pub async fn validate_conversation(
                 let conversations = Conversation::find()
                     .filter(conversation::server::Column::Id.eq(desired_conversation_id))
                     .all(data)
-                    .await
-                    .unwrap();
+                    .await?;
 
                 let other_users = RetrieveConversations::retrieve_associated_users(
                     user,
@@ -1143,8 +1115,7 @@ pub async fn validate_conversation(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(ViewMessages, "/api", "Url")]
@@ -1188,8 +1159,7 @@ pub async fn view_messages(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(AssociatedConversation, "/api", "Url")]
@@ -1282,37 +1252,29 @@ pub async fn handle_message_input(
                 let mut image_location: Option<String> = Default::default();
 
                 if let Some(image_vec) = image {
-                    let current_time = std::time::UNIX_EPOCH
-                        .elapsed()
-                        .unwrap()
-                        .as_secs()
-                        .to_string();
+                    let current_time = std::time::UNIX_EPOCH.elapsed()?.as_secs().to_string();
 
                     if tokio::fs::metadata("./upload").await.is_err() {
-                        tokio::fs::create_dir_all("./upload").await.unwrap();
+                        tokio::fs::create_dir_all("./upload").await?;
                     };
 
                     let kind = infer::get(&image_vec).expect("file type is known");
                     let image = if !kind.mime_type().eq("image/png") {
                         let image = ImageReader::new(std::io::Cursor::new(image_vec))
-                            .with_guessed_format()
-                            .unwrap()
-                            .decode()
-                            .unwrap();
+                            .with_guessed_format()?
+                            .decode()?;
 
                         turbojpeg::compress_image(
                             &image.into_rgba8(),
                             50,
                             turbojpeg::Subsamp::Sub2x2,
-                        )
-                        .unwrap()
+                        )?
                         .to_vec()
                     } else {
                         image_vec
                     };
                     tokio::fs::write("./upload/".to_string() + &current_time + ".png", image)
-                        .await
-                        .ok();
+                        .await?;
                     image_location = Some("/upload/".to_string() + &current_time + ".png")
                 };
 
@@ -1332,8 +1294,7 @@ pub async fn handle_message_input(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(FindImage, "/api", "Url")]
@@ -1379,8 +1340,7 @@ pub async fn handle_seen(cx: Scope, conversation_id: i32) -> Result<(), ServerFn
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(DeleteConversation, "/api", "Url")]
@@ -1403,8 +1363,7 @@ pub async fn delete_conversations(cx: Scope, conversation_id: i32) -> Result<(),
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(GetUser, "/api", "Url")]
@@ -1424,8 +1383,7 @@ pub async fn get_user(cx: Scope) -> Result<UserModel, ServerFnError> {
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(UploadImage, "/api", "Url")]
@@ -1490,35 +1448,28 @@ pub async fn upload_user_info(
                     if kind.mime_type() != "image/jpeg" && kind.mime_type() != "image/png" {
                         return Err(ServerFnError::Args(format!("Incorrect Mime Type {}", kind)));
                     };
-                    let current_time = std::time::UNIX_EPOCH
-                        .elapsed()
-                        .unwrap()
-                        .as_secs()
-                        .to_string();
+                    let current_time = std::time::UNIX_EPOCH.elapsed()?.as_secs().to_string();
 
                     if tokio::fs::metadata("./images").await.is_err() {
-                        tokio::fs::create_dir_all("./images").await.unwrap();
+                        tokio::fs::create_dir_all("./images").await?;
                     };
 
                     let image_path = "images/".to_string() + &current_time + ".png";
                     let image = if !kind.mime_type().eq("image/png") {
                         let image = ImageReader::new(std::io::Cursor::new(image))
-                            .with_guessed_format()
-                            .unwrap()
-                            .decode()
-                            .unwrap();
+                            .with_guessed_format()?
+                            .decode()?;
 
                         turbojpeg::compress_image(
                             &image.into_rgba8(),
                             50,
                             turbojpeg::Subsamp::Sub2x2,
-                        )
-                        .unwrap()
+                        )?
                         .to_vec()
                     } else {
                         image
                     };
-                    tokio::fs::write(&image_path, image).await.unwrap();
+                    tokio::fs::write(&image_path, image).await?;
 
                     AppendDatabase::modify(
                         user,
@@ -1537,8 +1488,7 @@ pub async fn upload_user_info(
             }
         },
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[server(GetIcon, "/api", "Url")]
@@ -1580,7 +1530,7 @@ pub async fn get_image(cx: Scope, path: String) -> Result<Option<Vec<u8>>, Serve
 
     let mut buffer = Vec::new();
     if let Ok(mut file) = tokio::fs::File::open(path).await {
-        file.read_to_end(&mut buffer).await.unwrap();
+        file.read_to_end(&mut buffer).await?;
         Ok(Some(buffer))
     } else {
         Ok(None)

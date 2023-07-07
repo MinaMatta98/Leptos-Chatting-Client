@@ -1,7 +1,7 @@
 cfg_if::cfg_if! {
 if #[cfg(feature = "ssr")] {
 use crate::migrator;
-use sea_orm::{ConnectionTrait, Database, DbBackend, DbErr, Statement};
+use sea_orm::{ConnectionTrait, Database, DbBackend, DbErr, Statement, ConnectOptions};
 use std::io::BufRead;
 }
 }
@@ -43,15 +43,25 @@ impl DbConnection {
 
     pub async fn connect() -> DatabaseConnection {
         println!("Retrieving global database variables");
+
         let database_url = std::env::var("DATABASE_URL").unwrap();
+
         let db_name = std::env::var("DB_NAME").unwrap();
+
         println!("Retrieved global database variables");
+
         let url = format!("{}/{}", database_url, db_name);
+
         let (tx, rx) = std::sync::mpsc::channel();
-        tokio::task::spawn_local(async move { tx.send(Database::connect(&url).await.unwrap()) })
-            .await
-            .unwrap()
-            .unwrap();
+        let mut conn_opts = ConnectOptions::new(url);
+        conn_opts.sqlx_logging(false);
+        tokio::task::spawn_local(
+            async move { tx.send(Database::connect(conn_opts).await.unwrap()) },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
         rx.recv().unwrap()
     }
 }
