@@ -172,6 +172,19 @@ impl ICONVEC {
     ) {
         if let Some(message_string) = message_string {
             Self::image_view(cx, &message_string, sidebar, image_signal);
+            let mut lock = ICONVEC.write();
+
+            if let Some(position) = lock.iter().position(|icon| icon.user_id == id) {
+                lock.remove(position);
+            };
+
+            lock.push(UserIcon {
+                user_id: id,
+                image: message_string,
+            });
+            
+        } else if let Some(image) = ICONVEC.read().iter().find(|item| item.user_id == id) {
+            Self::image_view(cx, image.image.as_str(), sidebar, image_signal);
         } else {
             let image =
                 create_local_resource(cx, || (), move |_| async move { get_icon(cx, id).await });
@@ -184,6 +197,7 @@ impl ICONVEC {
                             image.read(cx).map(|image| {
                                  if let Some(image) = image.unwrap() {
                                      let base64_encoded_image = general_purpose::STANDARD_NO_PAD.encode(image);
+                                     ICONVEC.write().push(UserIcon { user_id: id, image: base_64_encode_uri(base64_encoded_image.clone()) });
                                      Self::image_view(cx, base_64_encode_uri(base64_encoded_image).as_str(), sidebar, image_signal);
                                  } else {
                                      Self::icon_view(cx, Icon::Bi(BiIcon::BiUserCircleSolid), is_group, sidebar, image_signal);
@@ -200,7 +214,7 @@ impl ICONVEC {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserIcon {
     pub user_id: i32,
-    pub image: RwSignal<IconType>,
+    pub image: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
