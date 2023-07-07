@@ -51,9 +51,6 @@ jobs:
           cargo install cargo-leptos
           cargo leptos build --release
 
-      - name: Run the project
-        run: cargo leptos watch --release
-
       - name: Update build tag
         run: |
           echo "::set-env name=BUILD_TAG::$(git describe --tags --always)"
