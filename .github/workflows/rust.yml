@@ -1,0 +1,58 @@
+name: Rust Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Rust nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt-get install -y \
+            sudo \
+            lsb-release \
+            cmake \
+            nasm \
+            expect \
+            wget \
+            curl \
+            gnupg \
+            pkg-config \
+            libssl-dev \
+            redis-server \
+            mariadb-server
+
+      - name: Alloc. Env. Vars
+        run: |
+          echo "MYSQL_USERNAME=jenkins" >> $GITHUB_ENV
+          echo "MYSQL_PASSWORD=hilton" >> $GITHUB_ENV
+          echo "DATABASE_URL=mysql://$MYSQL_USERNAME:$MYSQL_PASSWORD@localhost:3306" >> $GITHUB_ENV
+          echo "DB_NAME=ZING" >> $GITHUB_ENV
+
+      - name: Build the project via Cargo Leptos
+        run: |
+          sudo service mariadb start
+          rustup target add wasm32-unknown-unknown
+          cargo install cargo-leptos
+          cargo leptos build --release
+
+      - name: Run the project
+        run: cargo leptos watch --release
+
+      - name: Update build tag
+        run: |
+          echo "::set-env name=BUILD_TAG::$(git describe --tags --always)"
