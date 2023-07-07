@@ -50,7 +50,3 @@ jobs:
           rustup target add wasm32-unknown-unknown
           cargo install cargo-leptos
           cargo leptos build --release
-
-      - name: Update build tag
-        run: |
-          echo "::set-env name=BUILD_TAG::$(git describe --tags --always)"
