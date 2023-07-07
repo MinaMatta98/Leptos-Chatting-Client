@@ -1,4 +1,6 @@
 # Leptos-Chatting-Client
+[![Rust Build](https://github.com/MinaMatta98/Leptos-Chatting-Client/actions/workflows/rust.yml/badge.svg)](https://github.com/MinaMatta98/Leptos-Chatting-Client/actions/workflows/rust.yml)
+
 This repository demonstrates the use of the following crates:
 * [Actix-web](https://actix.rs/): 
 Actix-Web based backend framework for request management.
