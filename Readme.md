@@ -96,10 +96,11 @@ For effective use, create 3 different user accounts to experiment with group cha
 A burner email is used for the verification process for demonstrative purposes.
 
 ## Recommendations
-This repository has been implemented as a proof of concept. Prior to copying this implementation for production purposes, the following recommendations are made:
+This repository has been implhttps://leptonic.dev/emented as a proof of concept. Prior to copying this implementation for production purposes, the following recommendations are made:
 
 * SQL databases should not have incremental querying.
 * Returning a Bytes Vector should be streamed. For example, instead of a return type of Result<Vec<u8>>, return:
+* Use pre-built components from [Leptonic](https://leptonic.dev/).
 ```rust
 fn() -> Result<impl futures_util::Stream<Item = &[u8], std::io::Error>> + Unpin + Serialize + Deserialize>>>
 ```
