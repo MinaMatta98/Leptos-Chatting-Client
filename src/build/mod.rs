@@ -1,3 +1,4 @@
+use dotenv::dotenv;
 use pkg_config::Config;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -196,6 +197,7 @@ pub fn check_redis(distribution: &str) {
 }
 
 fn main() -> Result<(), std::io::Error> {
+    dotenv().ok();
     run_command(check_redis)?;
     run_command(install_mysql)
 }

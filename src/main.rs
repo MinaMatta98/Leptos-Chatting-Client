@@ -7,6 +7,7 @@ use actix::*;
 use actix_web::web;
 use actix_web::{cookie::Key, get, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
+use dotenv::dotenv;
 pub use sea_orm::{Database, DbErr, *};
 pub mod app;
 pub mod database;
@@ -112,6 +113,7 @@ async fn chat_route(
 #[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
     if let Err(err) = database_run().await {
         panic!("Database connection panicked with: {}", err);
     }

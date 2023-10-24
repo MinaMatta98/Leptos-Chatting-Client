@@ -8,6 +8,7 @@ build = "./src/build/mod.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+dotenv = {version = "0.15.0", optional = true}
 actix-files = { version = "0.6.2", optional = true }
 actix-web = { version = "4.3.1", optional = true, features = ["macros", "secure-cookies"] }
 actix-identity = { version = "0.5.2", optional = true }
@@ -54,6 +55,7 @@ image = { version = "0.24.6", features = ["rgb"], optional = true }
 
 [build-dependencies]
 pkg-config = "0.3.26"
+dotenv = "0.15.0"
 
 [profile.wasm-release]
 inherits = "release"
@@ -70,6 +72,7 @@ ssr = [
   "dep:actix-web",
   "dep:leptos_actix",
   "dep:sea-orm",
+  "dep:dotenv",
   "dep:lettre",
   "dep:tokio",
   "dep:actix-identity",

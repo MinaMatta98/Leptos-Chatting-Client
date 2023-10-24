@@ -18,8 +18,9 @@ use crate::{
         callback::{Callback, SignupSetters},
         form_items::{Banner, InputProps, InputValidation, ValidationGetter},
         pages::{
+            components::anciliary::EmptyState,
             conversation::{ConversationId, Conversations},
-            Users, components::anciliary::EmptyState,
+            Users,
         },
     },
     server_function::UserLogin,
@@ -292,10 +293,10 @@ fn FormItem(
 
     view! {cx,
         <div class="flex w-100 sm:text-xs md:text-xs py-0.5">
-        <label for=field.clone() class=move || format!("flex basis-3/6 sm:basis-3/6 md:basis-2/6 rounded-s-lg py-1 px-1 justify-center {} sm:py-1 ml-3 lg:ml-7 lg:text-sm md:text-xs", label_background_color())>
-                {field.clone().to_string() + " :"}</label>
+        <label for=field class=move || format!("flex basis-3/6 sm:basis-3/6 md:basis-2/6 rounded-s-lg py-1 px-1 justify-center {} sm:py-1 ml-3 lg:ml-7 lg:text-sm md:text-xs", label_background_color())>
+                {field.to_string() + " :"}</label>
             <div dir="rtl" class=move || format!("flex rounded-s-lg border-2 {} justify-center basis:-3/6 md:basis-4/6 sm:basis-3/6 mr-5 sm:py-0 sm:px-0", background_color())>
-            <input _ref=_reference name=name dir="ltr" type=input_type placeholder=field.clone().to_string() + "..." id=field
+            <input _ref=_reference name=name dir="ltr" type=input_type placeholder=field.to_string() + "..." id=field
                 class="w-100 decoration-2 focus:border-0 focus:outline-none decoration-amber-600 xs:py-0 xs:px-0 mx-5" style="width: 100%"
                 on:input=Callback::on_keypress_callback(cx, background_color_setter, validator, label_background_color_setter, toggle)
                 value=move ||
