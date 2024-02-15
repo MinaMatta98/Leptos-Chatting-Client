@@ -1,7 +1,7 @@
 use crate::app::pages::{
     components::anciliary::loading_fallback, HandleWebSocket, StreamData, SyncChannel, WsData,
 };
-use crate::server_function::get_icon;
+use crate::server_function::routes::get_icon;
 use base64::{engine::general_purpose, Engine};
 use lazy_static::lazy_static;
 use leptos::*;

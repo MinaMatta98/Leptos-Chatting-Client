@@ -7,7 +7,7 @@ use crate::{
         pages::{conversation::ConversationParams, Avatar, SettingsModal, ICONVEC, SINKVEC},
         IsOpen, SideBarContext,
     },
-    server_function::{self, login_status, UserLogin},
+    server_function::{self, routes::login_status, UserLogin},
 };
 
 use super::avatar::STREAMVEC;
@@ -64,7 +64,7 @@ impl<'a> SidebarIcon<'a> {
                 create_resource(
                     cx,
                     || (),
-                    async move |_| server_function::logout(cx).await.unwrap(),
+                    async move |_| server_function::routes::logout(cx).await.unwrap(),
                 );
                 // queue_microtask(move || use_navigate(cx)("/login", Default::default()).unwrap());
             })),
@@ -155,7 +155,7 @@ pub fn Sidebar(cx: Scope, children: Children) -> impl IntoView {
 fn DesktopSidebar(cx: Scope) -> impl IntoView {
     create_effect(cx, move |_| {
         spawn_local(async move {
-            if server_function::redirect(cx).await.unwrap() {
+            if server_function::routes::redirect(cx).await.unwrap() {
                 queue_microtask(move || {
                     leptos_router::use_navigate(cx)("/login", Default::default()).unwrap()
                 });

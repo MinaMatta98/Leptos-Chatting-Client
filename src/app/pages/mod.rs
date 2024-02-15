@@ -1,6 +1,6 @@
 use crate::{
     app::pages::components::{anciliary::UserContext, avatar},
-    server_function::get_image,
+    server_function::routes::get_image,
 };
 
 pub mod components;

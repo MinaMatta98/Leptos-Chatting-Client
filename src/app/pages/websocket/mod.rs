@@ -14,7 +14,7 @@ use super::components::avatar::{self, IconData, SINKVEC, STREAMVEC};
 use super::conversation::Message;
 use super::UserContext;
 use crate::app::{pages::components::avatar::ToStreamData, SeenContext};
-use crate::server_function::handle_message_input;
+use crate::server_function::routes::handle_message_input;
 
 #[derive(Debug, Clone)]
 pub enum SyncChannel {

@@ -14,9 +14,13 @@ use crate::{
         DrawerContext, IsOpen, MessageDrawerContext, SeenContext, SeenContextInner,
     },
     server_function::{
-        self, find_image, get_conversations, handle_seen, login_status, validate_conversation,
-        view_messages, ConversationMeta, ImageAvailability, MergedConversation, MergedMessages,
-        SeenMessageFacing, UserLogin,
+        self,
+        routes::{
+            find_image, get_conversations, handle_seen, login_status, validate_conversation,
+            view_messages,
+        },
+        ConversationMeta, ImageAvailability, MergedConversation, MergedMessages, SeenMessageFacing,
+        UserLogin,
     },
 };
 
@@ -414,7 +418,6 @@ fn Body(cx: Scope, messages: Vec<MergedMessages>) -> impl IntoView {
         {
             seen_context.get().get(index).unwrap().last_message_id
         } else {
-
             let last_message = if let Some(last_message) = boxed_messages.clone().iter().last() {
                 last_message.message_id
             } else {

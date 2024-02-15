@@ -8,8 +8,8 @@ use crate::{app::{NameSchema, SignupSchema,
     EmailSchema, PhoneSchema, EmailContext,
     FormValidation, validation::ValidationSchema,
     PasswordSchema, VerifyPassword},
-    server_function::{ConfirmSubscription,
-    self, Login, sign_up}};
+    server_function::{routes::ConfirmSubscription,
+    self, routes::Login, routes::sign_up}};
 
 use super::{VerificationValidation, SignupContext, AppState};
 
@@ -72,8 +72,8 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                             { match val {
                                     Ok(FormValidation::Success {random_string}) => { 
                                     database_connection_result_setter.set(String::from("Sending Verification Email..."));
-                                    let verification = create_server_action::<crate::server_function::VerifyEmail>(cx);
-                                    verification.dispatch(crate::server_function::VerifyEmail { first_name: 
+                                    let verification = create_server_action::<crate::server_function::routes::VerifyEmail>(cx);
+                                    verification.dispatch(crate::server_function::routes::VerifyEmail { first_name: 
                                         info.first_name.get().unwrap().value(), email: info.email.get().unwrap().value(),
                                         random_string: random_string.unwrap()} );
 
@@ -276,7 +276,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                         toggle
                     ) {
                         true => {
-                            match server_function::cred_validation(cx, Some(email_schema), None)
+                            match server_function::routes::cred_validation(cx, Some(email_schema), None)
                                 .await
                                 .unwrap()
                             {
@@ -326,7 +326,7 @@ let signup = create_resource(cx, move || sign_up_schema.clone(), move |sign_up_s
                         toggle
                     ) {
                         true => {
-                            match server_function::cred_validation(cx, None, Some(phone_schema))
+                            match server_function::routes::cred_validation(cx, None, Some(phone_schema))
                                 .await
                                 .unwrap()
                             {
